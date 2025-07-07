@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -12,7 +11,7 @@ import (
 
 func main() {
 	// TODO: Remove this after development.
-	slog.SetLogLoggerLevel(slog.LevelError)
+	// slog.SetLogLoggerLevel(slog.LevelError)
 
 	tr := &http.Transport{
 		MaxIdleConns:    100,
@@ -33,33 +32,34 @@ func main() {
 
 				return r.StatusCode() >= 500
 			},
-		).
-		AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
-			slog.Info("Request completed",
-				"method", resp.Request.Method,
-				"url", resp.Request.URL,
-				"status", resp.StatusCode(),
-				"body", resp.String(),
-			)
-			return nil
-		}).
-		OnError(func(req *resty.Request, err error) {
-			if v, ok := err.(*resty.ResponseError); ok {
-				slog.Error("request failed after retries",
-					"method", req.Method,
-					"url", req.URL,
-					"status", v.Response.StatusCode(),
-					"body", v.Response.String(),
-					"attempts", req.Attempt,
-				)
-			} else {
-				slog.Error("request failed with non-retryable error",
-					"method", req.Method,
-					"url", req.URL,
-					"error", err.Error(),
-				)
-			}
-		})
+		)
+		// ).
+		// AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
+		// 	slog.Info("Request completed",
+		// 		"method", resp.Request.Method,
+		// 		"url", resp.Request.URL,
+		// 		"status", resp.StatusCode(),
+		// 		"body", resp.String(),
+		// 	)
+		// 	return nil
+		// }).
+		// OnError(func(req *resty.Request, err error) {
+		// 	if v, ok := err.(*resty.ResponseError); ok {
+		// 		slog.Error("request failed after retries",
+		// 			"method", req.Method,
+		// 			"url", req.URL,
+		// 			"status", v.Response.StatusCode(),
+		// 			"body", v.Response.String(),
+		// 			"attempts", req.Attempt,
+		// 		)
+		// 	} else {
+		// 		slog.Error("request failed with non-retryable error",
+		// 			"method", req.Method,
+		// 			"url", req.URL,
+		// 			"error", err.Error(),
+		// 		)
+		// 	}
+		// })
 
 	clientFallback := resty.New().
 		SetTimeout(100 * time.Millisecond).
@@ -75,32 +75,34 @@ func main() {
 
 				return r.StatusCode() >= 500
 			},
-		).
-		AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
-			slog.Info("Request completed",
-				"method", resp.Request.Method,
-				"url", resp.Request.URL,
-				"status", resp.StatusCode(),
-				"body", resp.String(),
-			)
-			return nil
-		}).
-		OnError(func(req *resty.Request, err error) {
-			if v, ok := err.(*resty.ResponseError); ok {
-				slog.Error("request failed after retries",
-					"method", req.Method,
-					"url", req.URL,
-					"status", v.Response.StatusCode(),
-					"body", v.Response.String(),
-				)
-			} else {
-				slog.Error("request failed with non-retryable error",
-					"method", req.Method,
-					"url", req.URL,
-					"error", err.Error(),
-				)
-			}
-		})
+		)
+		// ).
+		// AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
+		// 	slog.Info("Request completed",
+		// 		"method", resp.Request.Method,
+		// 		"url", resp.Request.URL,
+		// 		"status", resp.StatusCode(),
+		// 		"body", resp.String(),
+		// 	)
+		// 	return nil
+		// }).
+		// OnError(func(req *resty.Request, err error) {
+		// 	if v, ok := err.(*resty.ResponseError); ok {
+		// 		slog.Error("request failed after retries",
+		// 			"method", req.Method,
+		// 			"url", req.URL,
+		// 			"status", v.Response.StatusCode(),
+		// 			"body", v.Response.String(),
+		// 			"attempts", req.Attempt,
+		// 		)
+		// 	} else {
+		// 		slog.Error("request failed with non-retryable error",
+		// 			"method", req.Method,
+		// 			"url", req.URL,
+		// 			"error", err.Error(),
+		// 		)
+		// 	}
+		// })
 
 	adapterDefaultUrl := os.Getenv("PAYMENT_PROCESSOR_URL_DEFAULT")
 	if adapterDefaultUrl == "" {

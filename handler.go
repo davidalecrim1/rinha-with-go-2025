@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log/slog"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -22,7 +21,7 @@ POST /payments
 func (h *PaymentHandler) Process(c *fiber.Ctx) error {
 	var req PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
-		slog.Error("failed to parse the request body", "error", err)
+		// slog.Error("failed to parse the request body", "error", err)
 		return c.SendStatus(400)
 	}
 
