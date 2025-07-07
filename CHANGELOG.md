@@ -11,4 +11,5 @@
 **Commit:** f343adaad7307e0779866985fee996f6ea6e33cb
 
 **Changes**:
-- Short the retries logic considering the tiemout of the load test.
+- Short the retries logic considering the timeout of the load test.
+- Seeing the current logic of the K6 script. This won't be enough to ensure no requests are lost.
