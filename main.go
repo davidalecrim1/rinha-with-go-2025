@@ -19,11 +19,48 @@ func main() {
 		IdleConnTimeout: 90 * time.Second,
 	}
 
-	client := resty.New().
-		SetTimeout(5 * time.Second).
+	clientDefault := resty.New().
+		SetTimeout(1 * time.Second).
 		SetTransport(tr).
 		SetRetryCount(3).
 		SetRetryWaitTime(1 * time.Second).
+		SetAllowNonIdempotentRetry(true).
+		AddRetryConditions(
+			func(r *resty.Response, err error) bool {
+				return r.StatusCode() >= 500
+			},
+		).
+		AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
+			slog.Info("Request completed",
+				"method", resp.Request.Method,
+				"url", resp.Request.URL,
+				"status", resp.StatusCode(),
+				"body", resp.String(),
+			)
+			return nil
+		}).
+		OnError(func(req *resty.Request, err error) {
+			if v, ok := err.(*resty.ResponseError); ok {
+				slog.Error("request failed after retries",
+					"method", req.Method,
+					"url", req.URL,
+					"status", v.Response.StatusCode(),
+					"body", v.Response.String(),
+				)
+			} else {
+				slog.Error("request failed with non-retryable error",
+					"method", req.Method,
+					"url", req.URL,
+					"error", err.Error(),
+				)
+			}
+		})
+
+	clientFallback := resty.New().
+		SetTimeout(5 * time.Second).
+		SetTransport(tr).
+		SetRetryCount(6).
+		SetRetryWaitTime(2 * time.Second).
 		SetAllowNonIdempotentRetry(true).
 		AddRetryConditions(
 			func(r *resty.Response, err error) bool {
@@ -67,7 +104,7 @@ func main() {
 		// adapterFallbackUrl = "http://payment-processor-fallback:8080"
 	}
 
-	adapter := &PaymentProcessorAdapter{client, adapterDefaultUrl, adapterFallbackUrl}
+	adapter := &PaymentProcessorAdapter{clientDefault, clientFallback, adapterDefaultUrl, adapterFallbackUrl}
 	handler := &PaymentHandler{adapter}
 
 	app := fiber.New()
