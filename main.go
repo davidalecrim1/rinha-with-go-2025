@@ -12,7 +12,7 @@ import (
 
 func main() {
 	// TODO: Remove this after development.
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.SetLogLoggerLevel(slog.LevelError)
 
 	tr := &http.Transport{
 		MaxIdleConns:    100,
@@ -20,13 +20,17 @@ func main() {
 	}
 
 	clientDefault := resty.New().
-		SetTimeout(1 * time.Second).
+		SetTimeout(100 * time.Millisecond).
 		SetTransport(tr).
 		SetRetryCount(3).
-		SetRetryWaitTime(1 * time.Second).
+		SetRetryWaitTime(50 * time.Millisecond).
 		SetAllowNonIdempotentRetry(true).
 		AddRetryConditions(
 			func(r *resty.Response, err error) bool {
+				if err != nil {
+					return true
+				}
+
 				return r.StatusCode() >= 500
 			},
 		).
@@ -46,6 +50,7 @@ func main() {
 					"url", req.URL,
 					"status", v.Response.StatusCode(),
 					"body", v.Response.String(),
+					"attempts", req.Attempt,
 				)
 			} else {
 				slog.Error("request failed with non-retryable error",
@@ -57,13 +62,17 @@ func main() {
 		})
 
 	clientFallback := resty.New().
-		SetTimeout(5 * time.Second).
+		SetTimeout(100 * time.Millisecond).
 		SetTransport(tr).
-		SetRetryCount(6).
-		SetRetryWaitTime(2 * time.Second).
+		SetRetryCount(3).
+		SetRetryWaitTime(100 * time.Millisecond).
 		SetAllowNonIdempotentRetry(true).
 		AddRetryConditions(
 			func(r *resty.Response, err error) bool {
+				if err != nil {
+					return true
+				}
+
 				return r.StatusCode() >= 500
 			},
 		).
@@ -110,6 +119,7 @@ func main() {
 	app := fiber.New()
 	app.Post("/payments", handler.Process)
 	app.Get("/payments-summary", handler.Summary)
+	app.Post("/purge-payments", handler.Purge)
 
 	err := app.Listen(":9999")
 	if err != nil {

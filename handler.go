@@ -64,3 +64,11 @@ func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
 
 	return c.JSON(summary)
 }
+
+/*
+GET /purge-payments
+Just created because it's requested in the K6 script.
+*/
+func (h *PaymentHandler) Purge(c *fiber.Ctx) error {
+	return c.SendStatus(200)
+}
