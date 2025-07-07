@@ -5,3 +5,10 @@
 **Changes**:
 - If both default and fallback are failing. The API will return 500 after about 16 seconds considering the current retry logic.
 - The current configuration considers that the **clientDefault** with Resty with retry faster. The **clientFallback** with retry slower.
+
+# v0.0.2
+
+**Commit:** f343adaad7307e0779866985fee996f6ea6e33cb
+
+**Changes**:
+- Short the retries logic considering the tiemout of the load test.
