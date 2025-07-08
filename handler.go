@@ -25,13 +25,12 @@ func (h *PaymentHandler) Process(c *fiber.Ctx) error {
 		return c.SendStatus(400)
 	}
 
-	processReq := PaymentRequestProcessor{
-		req,
-		time.Now().UTC().Format(time.RFC3339),
-	}
-	if err := h.a.Process(processReq); err != nil {
-		return c.SendStatus(500)
-	}
+	h.a.EnqueuePayment(
+		PaymentRequestProcessor{
+			req,
+			time.Now().UTC().Format(time.RFC3339),
+			0,
+		})
 
 	return c.SendStatus(200)
 }
@@ -55,8 +54,13 @@ HTTP 200 - Ok
 func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
+	tokenStr := c.Get("X-Rinha-Token")
 
-	summary, err := h.a.Summary(fromStr, toStr)
+	if tokenStr == "" {
+		tokenStr = "123"
+	}
+
+	summary, err := h.a.Summary(fromStr, toStr, tokenStr)
 	if err != nil {
 		return c.SendStatus(500)
 	}
@@ -67,7 +71,18 @@ func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
 /*
 GET /purge-payments
 Just created because it's requested in the K6 script.
+I won't proxy this to the API's for now.
 */
 func (h *PaymentHandler) Purge(c *fiber.Ctx) error {
+	tokenStr := c.Get("X-Rinha-Token")
+
+	if tokenStr == "" {
+		tokenStr = "123"
+	}
+
+	if err := h.a.Purge(tokenStr); err != nil {
+		return c.SendStatus(500)
+	}
+
 	return c.SendStatus(200)
 }
