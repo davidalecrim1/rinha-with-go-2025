@@ -27,4 +27,13 @@
 **Changes**:
 - Create three workers pools. One being hot to process in the default URL. One that is cool to process in the fallback URL. One that is cold to retry on both doing round robin and the best to not lose the connection.
 - This current version is running with all the computing power from my computer. The next version should be tuned for the infrastructure restrictions.
-- I still see some inconsistency in this version: balance_inconsistency_amount -> 79.6	
+- I still see some inconsistency in this version: balance_inconsistency_amount -> 79.6
+
+# v.0.2.0
+
+**Commit:** 828d26fae859051b774eb45c4ce2d8cb42299a37
+**Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
+**Load Test Result**: report_20250709_070021.html
+
+**Changes**:
+- Using Docker, the inconsistency is too high. Even greater than the synchronous version: balance_inconsistency_amount -> 9.3k
