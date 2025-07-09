@@ -4,6 +4,8 @@
 - [x] Criar uma versão assincrona usando apenas channels e goroutines.
     - [x] Entender melhor o problema de retry que tem ocorrido quando rodo o K6.
     - [x] Entender melhor o tamanho estranho dos pools.
+- [x] Criar uma versão para rodar com docker e nginx.
+- [ ] Validar se tem algum recurso do Resty que poderia ajudar para ter melhor consistencia.
 - [ ] Remover os logs da versão final.
 
 ## Parking Lot

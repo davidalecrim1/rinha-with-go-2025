@@ -9,4 +9,8 @@ load-test:
 	k6 run ./rinha-source/rinha-test/rinha.js
 
 run-one-instance-local:
-	docker compose -f docker-compose-arm64.yml restart && air . 
+	docker compose -f rinha-docker-compose-arm64.yml restart && air . 
+
+run-docker:
+	docker compose -f rinha-docker-compose-arm64.yml restart && docker compose restart
+	

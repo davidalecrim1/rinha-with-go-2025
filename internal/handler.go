@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"time"
@@ -8,6 +8,12 @@ import (
 
 type PaymentHandler struct {
 	a *PaymentProcessorAdapter
+}
+
+func NewPaymentHandler(a *PaymentProcessorAdapter) *PaymentHandler {
+	return &PaymentHandler{
+		a: a,
+	}
 }
 
 /*
