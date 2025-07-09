@@ -13,28 +13,21 @@ import (
 
 func main() {
 	// TODO: Remove this after development.
-	// slog.SetLogLoggerLevel(slog.LevelError)
+	// slog.SetLogLoggerLevel(// slog.LevelDebug)
 
 	tr := &http.Transport{
-		MaxIdleConns:    0,
-		IdleConnTimeout: 90 * time.Second,
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 1000,
+		IdleConnTimeout:     120 * time.Second,
+		DisableCompression:  false,
+		ForceAttemptHTTP2:   true,
 	}
 
 	client := resty.New().
 		SetTransport(tr).
-		SetAllowNonIdempotentRetry(true).
-		AddRetryConditions(
-			func(r *resty.Response, err error) bool {
-				if err != nil {
-					return true
-				}
-
-				return r.StatusCode() >= 500
-			},
-		)
-		// ).
+		SetRetryCount(0) // I won't be using the retry from Resty.
 		// AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
-		// 	slog.Info("Request completed",
+		// 	slog.Debug("Request completed",
 		// 		"method", resp.Request.Method,
 		// 		"url", resp.Request.URL,
 		// 		"status", resp.StatusCode(),
@@ -79,7 +72,7 @@ func main() {
 }
 
 func getEnvOrSetDefault(key string, defaultVal string) string {
-	// slog.Debug(key)
+	// // slog.Debug(key)
 	if os.Getenv(key) == "" {
 		os.Setenv(key, defaultVal)
 		return defaultVal

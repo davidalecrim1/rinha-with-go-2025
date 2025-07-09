@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"resty.dev/v3"
@@ -38,48 +39,103 @@ func NewPaymentProcessorAdapter(
 }
 
 func (a *PaymentProcessorAdapter) Process(ctx context.Context, payment PaymentRequestProcessor) error {
-	req := a.client.R().
-		SetContext(ctx).
-		SetTimeout(time.Millisecond*200).
-		SetRetryCount(3).
-		SetRetryWaitTime(10*time.Millisecond).
-		SetRetryMaxWaitTime(50*time.Millisecond).
-		SetHeader("Connection", "keep-alive").
-		SetHeader("Accept-Encoding", "gzip, deflate, br").
-		SetBody(payment).
-		SetDoNotParseResponse(true)
-
-	err := a.sendPayment(req, a.defaultUrl+"/payments", payment)
+	err := a.processWithRetry(
+		ctx,
+		payment,
+		a.defaultUrl+"/payments",
+		3,
+		time.Millisecond*60,
+		time.Millisecond*50,
+		time.Millisecond*100,
+	)
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, ErrInvalidRequest) {
+		return err
+	}
 
-	req = a.client.R().
-		SetTimeout(time.Millisecond*200).
-		SetRetryCount(3).
-		SetRetryWaitTime(100*time.Millisecond).
-		SetRetryMaxWaitTime(1*time.Second).
-		SetHeader("Connection", "keep-alive").
-		SetHeader("Accept-Encoding", "gzip, deflate, br").
-		SetBody(payment).
-		SetDoNotParseResponse(true)
+	// slog.Debug("failed to process in the default endpoint, fallbacking to the second", "err", err)
 
-	err = a.sendPayment(req, a.fallbackUrl+"/payments", payment)
+	err = a.processWithRetry(
+		ctx,
+		payment,
+		a.fallbackUrl+"/payments",
+		5,
+		time.Millisecond*60,
+		time.Millisecond*100,
+		time.Millisecond*1000,
+	)
+
+	// slog.Debug("dropping the request giving it wasn't processed in the fallback.")
+	// TODO: Send to a channel for retry to the infinite to process more payments.
+
 	return err
 }
 
-func (a *PaymentProcessorAdapter) sendPayment(req *resty.Request, url string, payment PaymentRequestProcessor) error {
-	res, err := req.Post(url)
-	if res.StatusCode() >= 400 && res.StatusCode() < 499 {
-		// slog.Debug("The request is invalid", "StatusCode", res.StatusCode(), "correlationId", payment.CorrelationId)
-		return nil
+func (a PaymentProcessorAdapter) processWithRetry(
+	ctx context.Context,
+	payment PaymentRequestProcessor,
+	url string,
+	maxRetries int,
+	timeout time.Duration,
+	minWait time.Duration,
+	maxWait time.Duration,
+) error {
+	var lastErr error
+	wait := minWait
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-time.After(wait):
+				// will continue the execution after the select.
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			wait = min(wait*2, maxWait)
+			payment.UpdateRequestTime()
+		}
+
+		// slog.Debug("sending the request with retry", "attempt", attempt, "body", payment, "lastErr", lastErr, "url", url)
+
+		req := a.client.R().
+			SetContext(ctx).
+			SetHeader("Connection", "keep-alive").
+			SetHeader("Accept-Encoding", "gzip, deflate, br").
+			SetTimeout(timeout).
+			SetDoNotParseResponse(true).
+			SetBody(payment)
+
+		res, err := req.Post(url)
+		if a.isInvalidRequest(res) {
+			return ErrInvalidRequest
+		}
+
+		if !a.shouldRetry(res, err) {
+			return err
+		}
+
+		lastErr = err
 	}
 
-	if res.StatusCode() >= 500 {
-		return ErrRetriesAreOver
+	return fmt.Errorf("payment failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
+func (a *PaymentProcessorAdapter) isInvalidRequest(res *resty.Response) bool {
+	return res.StatusCode() == 422
+}
+
+func (a *PaymentProcessorAdapter) shouldRetry(res *resty.Response, err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
 	}
 
-	return err
+	if res.StatusCode() >= 500 || res.StatusCode() == 429 || res.StatusCode() == 408 {
+		return true
+	}
+
+	return false
 }
 
 func (a *PaymentProcessorAdapter) Summary(from, to, token string) (SummaryResponse, error) {

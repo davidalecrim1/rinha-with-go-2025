@@ -32,7 +32,7 @@ func (h *PaymentHandler) Process(c *fiber.Ctx) error {
 		return c.SendStatus(400)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
 	defer cancel()
 
 	payment := PaymentRequestProcessor{

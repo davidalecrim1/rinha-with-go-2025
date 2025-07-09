@@ -1,5 +1,7 @@
 package internal
 
+import "time"
+
 type PaymentRequest struct {
 	CorrelationId string  `json:"correlationId"`
 	Amount        float64 `json:"amount"`
@@ -8,6 +10,10 @@ type PaymentRequest struct {
 type PaymentRequestProcessor struct {
 	PaymentRequest
 	RequestedAt string `json:"requestedAt"`
+}
+
+func (p *PaymentRequestProcessor) UpdateRequestTime() {
+	p.RequestedAt = time.Now().UTC().Format(time.RFC3339)
 }
 
 type SummaryResponse struct {
