@@ -12,5 +12,5 @@ run-one-instance-local:
 	docker compose -f rinha-docker-compose-arm64.yml restart && air . 
 
 run-docker:
-	docker compose -f rinha-docker-compose-arm64.yml restart && docker compose restart
+	docker compose -f rinha-docker-compose-arm64.yml restart && docker compose up --build -d
 	

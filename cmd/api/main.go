@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -14,7 +13,7 @@ import (
 
 func main() {
 	// TODO: Remove this after development.
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	// slog.SetLogLoggerLevel(slog.LevelError)
 
 	tr := &http.Transport{
 		MaxIdleConns:    0,
@@ -32,40 +31,39 @@ func main() {
 
 				return r.StatusCode() >= 500
 			},
-		// )
-		).
-		AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
-			slog.Info("Request completed",
-				"method", resp.Request.Method,
-				"url", resp.Request.URL,
-				"status", resp.StatusCode(),
-				"body", resp.String(),
-			)
-			return nil
-		}).
-		OnError(func(req *resty.Request, err error) {
-			if v, ok := err.(*resty.ResponseError); ok {
-				slog.Error("request failed after retries",
-					"method", req.Method,
-					"url", req.URL,
-					"status", v.Response.StatusCode(),
-					"body", v.Response.String(),
-					"attempts", req.Attempt,
-				)
-			} else {
-				slog.Error("request failed with non-retryable error",
-					"method", req.Method,
-					"url", req.URL,
-					"error", err.Error(),
-				)
-			}
-		})
+		)
+		// ).
+		// AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
+		// 	slog.Info("Request completed",
+		// 		"method", resp.Request.Method,
+		// 		"url", resp.Request.URL,
+		// 		"status", resp.StatusCode(),
+		// 		"body", resp.String(),
+		// 	)
+		// 	return nil
+		// }).
+		// OnError(func(req *resty.Request, err error) {
+		// 	if v, ok := err.(*resty.ResponseError); ok {
+		// 		slog.Error("request failed after retries",
+		// 			"method", req.Method,
+		// 			"url", req.URL,
+		// 			"status", v.Response.StatusCode(),
+		// 			"body", v.Response.String(),
+		// 			"attempts", req.Attempt,
+		// 		)
+		// 	} else {
+		// 		slog.Error("request failed with non-retryable error",
+		// 			"method", req.Method,
+		// 			"url", req.URL,
+		// 			"error", err.Error(),
+		// 		)
+		// 	}
+		// })
 
 	adapterDefaultUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
 
 	adapter := internal.NewPaymentProcessorAdapter(client, adapterDefaultUrl, adapterFallbackUrl)
-	adapter.StartWorkers()
 	handler := internal.NewPaymentHandler(adapter)
 
 	app := fiber.New()
@@ -81,7 +79,7 @@ func main() {
 }
 
 func getEnvOrSetDefault(key string, defaultVal string) string {
-	slog.Debug(key)
+	// slog.Debug(key)
 	if os.Getenv(key) == "" {
 		os.Setenv(key, defaultVal)
 		return defaultVal

@@ -7,8 +7,7 @@ type PaymentRequest struct {
 
 type PaymentRequestProcessor struct {
 	PaymentRequest
-	RequestedAt  string `json:"requestedAt"`
-	retriedCount int
+	RequestedAt string `json:"requestedAt"`
 }
 
 type SummaryResponse struct {

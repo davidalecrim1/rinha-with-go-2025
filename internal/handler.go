@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -31,12 +32,16 @@ func (h *PaymentHandler) Process(c *fiber.Ctx) error {
 		return c.SendStatus(400)
 	}
 
-	h.a.EnqueuePayment(
-		PaymentRequestProcessor{
-			req,
-			time.Now().UTC().Format(time.RFC3339),
-			0,
-		})
+	ctx, cancel := context.WithTimeout(context.Background(), 1300*time.Millisecond)
+	defer cancel()
+
+	payment := PaymentRequestProcessor{
+		req,
+		time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := h.a.Process(ctx, payment); err != nil {
+		return c.SendStatus(500)
+	}
 
 	return c.SendStatus(200)
 }
