@@ -36,4 +36,4 @@
 **Load Test Result**: report_20250709_070021.html
 
 **Changes**:
-- Using Docker, the inconsistency is too high. Even greater than the synchronous version: balance_inconsistency_amount -> 9.3k
+- Using Docker, the inconsistency is too high. Even greater than the synchronous version: balance_inconsistency_amount -> 9.3k. Sometimes this was lower, but still high (3.7k).
