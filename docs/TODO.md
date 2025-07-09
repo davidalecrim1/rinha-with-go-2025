@@ -5,8 +5,12 @@
     - [x] Entender melhor o problema de retry que tem ocorrido quando rodo o K6.
     - [x] Entender melhor o tamanho estranho dos pools.
 - [x] Criar uma versão para rodar com docker e nginx.
-- [ ] Validar se tem algum recurso do Resty que poderia ajudar para ter melhor consistencia.
-- [ ] Remover os logs da versão final.
+- [x] Remover o Resty e colocar minha própria logica de retry dado os problemas com o UpdateRequestedAt e testar.
+- [x] Remover os logs da versão final.
+- [ ] Otimizar usando Sonic e net/http para cortar o máximo possivel de ms e evitar inconsistencias.
+- [ ] Usar um channel para retry mais longo de forma async.
+- [ ] Usar um health check da API com Redis (last option).
+
 
 ## Parking Lot
 - [ ] Refletir sobre a estratégia de endpoint default vs fallback e os custos do processamento.

@@ -37,3 +37,24 @@
 
 **Changes**:
 - Using Docker, the inconsistency is too high. Even greater than the synchronous version: balance_inconsistency_amount -> 9.3k. Sometimes this was lower, but still high (3.7k).
+
+# v.0.2.0 (Sync)
+
+**Commit:** 3e87ffc21a147bb3ab64a4545f87f174bac45d4c
+**Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
+**Load Test Result**: report_20250709_072736.html
+
+**Changes**:
+- This still has inconsistency probably cause of the requests failure to process on the default or fallback:
+- balance_inconsistency_amount -> 199
+- I discovered that the balance inconsistency can happen because I might send request that have the requestedAt in the past and cause the balance to be different when the load test calls the endpoints from the 3 APIs. Therefore I'm affecting the past and causing inconsistency.
+
+# v.0.2.1 (Sync)
+
+**Commit:** 
+**Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
+**Load Test Result**:
+
+**Changes**:
+- Removed resty to do the retry logic and changed it to be only the HTTP request library. This will help me update the "requestedAt" correctly and don't affect the past. I noticed also that if the API has a latency, let's say, 200 ms, it will cause inconsistency because I will be changing the "past" over the limit of 100 ms specified in the `rinha.js` load test.
+- I still see little inconsistency. I will optimize my code to remove all inconsistencies and tune the processing.
