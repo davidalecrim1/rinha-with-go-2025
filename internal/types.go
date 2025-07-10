@@ -11,11 +11,12 @@ type PaymentRequest struct {
 
 type PaymentRequestProcessor struct {
 	PaymentRequest
-	RequestedAt string `json:"requestedAt"`
+	RequestedAt *string `json:"requestedAt"`
 }
 
 func (p *PaymentRequestProcessor) UpdateRequestTime() {
-	p.RequestedAt = time.Now().Format(time.RFC3339)
+	requestedAt := time.Now().Format(time.RFC3339Nano)
+	p.RequestedAt = &requestedAt
 }
 
 type SummaryResponse struct {

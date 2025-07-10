@@ -1,8 +1,7 @@
 package internal
 
 import (
-	"context"
-	"time"
+	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -28,21 +27,16 @@ POST /payments
 func (h *PaymentHandler) Process(c *fiber.Ctx) error {
 	var req PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
-		// slog.Error("failed to parse the request body", "error", err)
+		slog.Error("failed to parse the request body", "error", err)
 		return c.SendStatus(400)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
-	defer cancel()
-
 	payment := PaymentRequestProcessor{
 		req,
-		time.Now().UTC().Format(time.RFC3339),
-	}
-	if err := h.a.Process(ctx, payment); err != nil {
-		return c.SendStatus(500)
+		nil,
 	}
 
+	go h.a.Process(payment)
 	return c.SendStatus(200)
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -17,67 +18,94 @@ var (
 	ErrInvalidRequest = errors.New("invalid request")
 )
 
-type PoolProcessor struct {
-	Queue   chan PaymentRequestProcessor
-	Workers int
-}
-
 type PaymentProcessorAdapter struct {
 	client      *http.Client
 	defaultUrl  string
 	fallbackUrl string
+	slowQueue   chan PaymentRequestProcessor
+	workers     int
 }
 
 func NewPaymentProcessorAdapter(
 	client *http.Client,
 	defaultUrl string,
 	fallbackUrl string,
+	slowQueue chan PaymentRequestProcessor,
+	workers int,
 ) *PaymentProcessorAdapter {
 	return &PaymentProcessorAdapter{
 		client:      client,
 		defaultUrl:  defaultUrl,
 		fallbackUrl: fallbackUrl,
+		slowQueue:   slowQueue,
+		workers:     workers,
 	}
 }
 
-func (a *PaymentProcessorAdapter) Process(ctx context.Context, payment PaymentRequestProcessor) error {
-	err := a.processWithRetry(
-		ctx,
+func (a *PaymentProcessorAdapter) Process(payment PaymentRequestProcessor) {
+	err := a.process(payment)
+	if err != nil {
+		a.slowQueue <- payment
+	}
+}
+
+func (a *PaymentProcessorAdapter) process(payment PaymentRequestProcessor) error {
+	err := a.processPaymentWithRetry(
 		payment,
 		a.defaultUrl+"/payments",
 		5,
-		time.Millisecond*70,
-		time.Millisecond*50,
-		time.Millisecond*100,
+		time.Millisecond*20,
+		time.Millisecond*500,
+		time.Millisecond*2000,
 	)
+
 	if err == nil {
 		return nil
 	}
 
-	// slog.Debug("failed to process in the default endpoint, fallbacking to the second", "err", err)
+	slog.Debug("failed to process in the default endpoint", "err", err)
 
 	if errors.Is(err, ErrInvalidRequest) {
-		return err
+		return nil
 	}
 
-	err = a.processWithRetry(
-		ctx,
+	err = a.processPaymentWithRetry(
 		payment,
 		a.fallbackUrl+"/payments",
-		5,
-		time.Millisecond*70,
-		time.Millisecond*100,
+		3,
+		time.Millisecond*20,
 		time.Millisecond*1000,
+		time.Millisecond*2000,
 	)
-
-	// slog.Debug("dropping the request giving it wasn't processed in the fallback.")
-	// TODO: Send to a channel for retry to the infinite to process more payments.
 
 	return err
 }
 
-func (a PaymentProcessorAdapter) processWithRetry(
-	ctx context.Context,
+func (a *PaymentProcessorAdapter) StartWorkers() {
+	for range a.workers {
+		go a.processSlowQueue()
+	}
+
+	go func() {
+		for {
+			slog.Info("Status of queue", "lenSlowQueue", len(a.slowQueue))
+			time.Sleep(3 * time.Second)
+		}
+	}()
+}
+
+func (a *PaymentProcessorAdapter) processSlowQueue() {
+	for payment := range a.slowQueue {
+		err := a.process(payment)
+		if err != nil {
+			slog.Debug("failed to process payment again, sending back to the queue", "error", err)
+			time.Sleep(time.Second * 2)
+			a.slowQueue <- payment
+		}
+	}
+}
+
+func (a PaymentProcessorAdapter) processPaymentWithRetry(
 	payment PaymentRequestProcessor,
 	url string,
 	maxRetries int,
@@ -90,16 +118,11 @@ func (a PaymentProcessorAdapter) processWithRetry(
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			select {
-			case <-time.After(wait):
-				// will continue the execution after the select.
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			time.Sleep(wait)
 			wait = min(wait*2, maxWait)
 		}
 
-		// slog.Debug("sending the request with retry", "attempt", attempt, "body", payment, "lastErr", lastErr, "url", url)
+		slog.Debug("sending the request with retry", "attempt", attempt, "body", payment, "lastErr", lastErr, "url", url)
 
 		payment.UpdateRequestTime()
 		reqBody, err := sonic.ConfigFastest.Marshal(payment)
@@ -107,7 +130,7 @@ func (a PaymentProcessorAdapter) processWithRetry(
 			return err
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
@@ -119,6 +142,7 @@ func (a PaymentProcessorAdapter) processWithRetry(
 		req.Header.Set("Connection", "keep-alive")
 
 		res, err := a.client.Do(req)
+		slog.Debug("response from api", "url", url, "res", res)
 		if !a.shouldRetry(res, err) {
 			if a.isInvalidRequest(res) {
 				return ErrInvalidRequest
@@ -154,12 +178,12 @@ func (a *PaymentProcessorAdapter) shouldRetry(res *http.Response, err error) boo
 func (a *PaymentProcessorAdapter) Summary(from, to, token string) (SummaryResponse, error) {
 	resDefaultBody, err := a.summary(a.defaultUrl+"/admin/payments-summary", from, to, token)
 	if err != nil {
-		// slog.Debug("failed to get summary response from default", "err", err, "resDefaultBody", resDefaultBody)
+		slog.Debug("failed to get summary response from default", "err", err, "resDefaultBody", resDefaultBody)
 		return SummaryResponse{}, err
 	}
 	resFallbackBody, err := a.summary(a.fallbackUrl+"/admin/payments-summary", from, to, token)
 	if err != nil {
-		// slog.Debug("failed to get summary response from fallback", "err", err, "resFallbackBody", resFallbackBody)
+		slog.Debug("failed to get summary response from fallback", "err", err, "resFallbackBody", resFallbackBody)
 		return SummaryResponse{}, err
 	}
 
@@ -231,7 +255,7 @@ func (a *PaymentProcessorAdapter) purge(url string, token string) error {
 
 	res, err := a.client.Do(req)
 	if err != nil {
-		// slog.Error("failed to purge the api", "error", err, "url", url)
+		slog.Error("failed to purge the api", "error", err, "url", url)
 		return err
 	}
 	defer res.Body.Close()

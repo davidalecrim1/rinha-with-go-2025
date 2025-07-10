@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -14,7 +15,7 @@ import (
 
 func main() {
 	// TODO: Remove this after development.
-	// slog.SetLogLoggerLevel(// slog.LevelDebug)
+	slog.SetLogLoggerLevel(slog.LevelInfo)
 
 	tr := &http.Transport{
 		MaxIdleConns:        200,
@@ -39,7 +40,12 @@ func main() {
 	adapterDefaultUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
 
-	adapter := internal.NewPaymentProcessorAdapter(client, adapterDefaultUrl, adapterFallbackUrl)
+	workers := 1000
+	slowQueue := make(chan internal.PaymentRequestProcessor, 10000)
+
+	adapter := internal.NewPaymentProcessorAdapter(client, adapterDefaultUrl, adapterFallbackUrl, slowQueue, workers)
+	adapter.StartWorkers()
+
 	handler := internal.NewPaymentHandler(adapter)
 
 	app := fiber.New(fiber.Config{
@@ -65,7 +71,7 @@ func main() {
 }
 
 func getEnvOrSetDefault(key string, defaultVal string) string {
-	// // slog.Debug(key)
+	// slog.Debug(key)
 	if os.Getenv(key) == "" {
 		os.Setenv(key, defaultVal)
 		return defaultVal
