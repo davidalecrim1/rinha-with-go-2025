@@ -46,7 +46,7 @@ func (a *PaymentProcessorAdapter) Process(ctx context.Context, payment PaymentRe
 		payment,
 		a.defaultUrl+"/payments",
 		5,
-		time.Millisecond*40,
+		time.Millisecond*70,
 		time.Millisecond*50,
 		time.Millisecond*100,
 	)
@@ -65,7 +65,7 @@ func (a *PaymentProcessorAdapter) Process(ctx context.Context, payment PaymentRe
 		payment,
 		a.fallbackUrl+"/payments",
 		5,
-		time.Millisecond*40,
+		time.Millisecond*70,
 		time.Millisecond*100,
 		time.Millisecond*1000,
 	)
@@ -102,7 +102,7 @@ func (a PaymentProcessorAdapter) processWithRetry(
 		// slog.Debug("sending the request with retry", "attempt", attempt, "body", payment, "lastErr", lastErr, "url", url)
 
 		payment.UpdateRequestTime()
-		reqBody, err := sonic.Marshal(payment)
+		reqBody, err := sonic.ConfigFastest.Marshal(payment)
 		if err != nil {
 			return err
 		}
@@ -200,7 +200,7 @@ func (a *PaymentProcessorAdapter) summary(rawUrl string, from, to, token string)
 	defer resp.Body.Close()
 
 	var parsed SummaryTotalRequestsResponse
-	if err = sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+	if err = sonic.ConfigFastest.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return SummaryTotalRequestsResponse{}, err
 	}
 

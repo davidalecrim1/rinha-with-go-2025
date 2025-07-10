@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -16,11 +17,19 @@ func main() {
 	// slog.SetLogLoggerLevel(// slog.LevelDebug)
 
 	tr := &http.Transport{
-		MaxIdleConns:        100,
+		MaxIdleConns:        200,
 		MaxIdleConnsPerHost: 100,
 		IdleConnTimeout:     120 * time.Second,
-		DisableCompression:  false,
-		ForceAttemptHTTP2:   true,
+		MaxConnsPerHost:     50,
+		DisableCompression:  true,
+		DisableKeepAlives:   false,
+		ForceAttemptHTTP2:   false,
+
+		DialContext: (&net.Dialer{
+			Timeout:   1 * time.Second,  // Fast connection establishment
+			KeepAlive: 30 * time.Second, // Keep TCP connections alive
+			DualStack: true,             // Enable IPv4/IPv6
+		}).DialContext,
 	}
 
 	client := &http.Client{

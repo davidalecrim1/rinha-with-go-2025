@@ -2,8 +2,6 @@ package internal
 
 import (
 	"time"
-
-	"rinha-with-go-2025/pkg/parser"
 )
 
 type PaymentRequest struct {
@@ -17,7 +15,7 @@ type PaymentRequestProcessor struct {
 }
 
 func (p *PaymentRequestProcessor) UpdateRequestTime() {
-	p.RequestedAt = parser.FormatRFC3339(time.Now())
+	p.RequestedAt = time.Now().Format(time.RFC3339)
 }
 
 type SummaryResponse struct {
