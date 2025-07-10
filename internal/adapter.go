@@ -331,7 +331,7 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 
 func (a *PaymentProcessorAdapter) retryWorkers() {
 	for payment := range a.retryQueue {
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Millisecond * 500)
 		a.Process(payment)
 	}
 }
