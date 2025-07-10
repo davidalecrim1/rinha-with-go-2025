@@ -18,10 +18,10 @@ func main() {
 	slog.SetLogLoggerLevel(slog.LevelInfo)
 
 	tr := &http.Transport{
-		MaxIdleConns:        200,
-		MaxIdleConnsPerHost: 100,
+		MaxIdleConns:        30,
+		MaxIdleConnsPerHost: 15,
 		IdleConnTimeout:     120 * time.Second,
-		MaxConnsPerHost:     50,
+		MaxConnsPerHost:     20,
 		DisableCompression:  true,
 		DisableKeepAlives:   false,
 		ForceAttemptHTTP2:   false,
@@ -40,8 +40,8 @@ func main() {
 	adapterDefaultUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
 
-	workers := 1000
-	slowQueue := make(chan internal.PaymentRequestProcessor, 10000)
+	workers := 100
+	slowQueue := make(chan internal.PaymentRequestProcessor, 1000)
 
 	adapter := internal.NewPaymentProcessorAdapter(client, adapterDefaultUrl, adapterFallbackUrl, slowQueue, workers)
 	adapter.StartWorkers()
@@ -71,7 +71,6 @@ func main() {
 }
 
 func getEnvOrSetDefault(key string, defaultVal string) string {
-	// slog.Debug(key)
 	if os.Getenv(key) == "" {
 		os.Setenv(key, defaultVal)
 		return defaultVal
@@ -80,10 +79,10 @@ func getEnvOrSetDefault(key string, defaultVal string) string {
 	return os.Getenv(key)
 }
 
-func sonicMarshal(v interface{}) ([]byte, error) {
+func sonicMarshal(v any) ([]byte, error) {
 	return sonic.Marshal(v)
 }
 
-func sonicUnmarshal(data []byte, v interface{}) error {
+func sonicUnmarshal(data []byte, v any) error {
 	return sonic.Unmarshal(data, v)
 }
