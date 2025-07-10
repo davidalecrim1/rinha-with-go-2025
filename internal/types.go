@@ -15,7 +15,7 @@ type PaymentRequestProcessor struct {
 }
 
 func (p *PaymentRequestProcessor) UpdateRequestTime() {
-	requestedAt := time.Now().UTC().Add((time.Second * 2)).Format(time.RFC3339Nano) // TODO: Remove the seconds
+	requestedAt := time.Now().UTC().Format(time.RFC3339Nano) // TODO: Remove the seconds
 	p.RequestedAt = &requestedAt
 }
 

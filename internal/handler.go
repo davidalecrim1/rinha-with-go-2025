@@ -21,7 +21,7 @@ func (h *PaymentHandler) Process(c *fiber.Ctx) error {
 	var req PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
 		slog.Error("failed to parse the request body", "error", err)
-		return c.SendStatus(400)
+		return c.SendStatus(http.StatusBadRequest)
 	}
 
 	payment := PaymentRequestProcessor{
@@ -44,7 +44,7 @@ func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
 
 	summary, err := h.a.Summary(fromStr, toStr, tokenStr)
 	if err != nil {
-		return c.SendStatus(500)
+		return c.SendStatus(http.StatusInternalServerError)
 	}
 
 	return c.JSON(summary)
@@ -58,8 +58,8 @@ func (h *PaymentHandler) Purge(c *fiber.Ctx) error {
 	}
 
 	if err := h.a.Purge(tokenStr); err != nil {
-		return c.SendStatus(500)
+		return c.SendStatus(http.StatusInternalServerError)
 	}
 
-	return c.SendStatus(200)
+	return c.SendStatus(http.StatusOK)
 }
