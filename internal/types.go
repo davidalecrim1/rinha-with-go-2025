@@ -34,3 +34,13 @@ type SummaryProcessorResponse struct {
 	TotalFee          float64 `json:"totalFee"`
 	FeePerTransaction float64 `json:"feePerTransaction"`
 }
+
+type HealthCheckResponse struct {
+	Failing         bool `json:"failing"`
+	MinResponseTime int  `json:"minResponseTime"`
+}
+
+type HealthCheckStatus struct {
+	Default  HealthCheckResponse `json:"default"`
+	Fallback HealthCheckResponse `json:"fallback"`
+}

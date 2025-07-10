@@ -8,104 +8,155 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/bytedance/sonic"
+	"github.com/redis/go-redis/v9"
 )
 
 var (
-	ErrRetriesAreOver = errors.New("retries are over")
-	ErrInvalidRequest = errors.New("invalid request")
+	ErrRetriesAreOver       = errors.New("retries are over")
+	ErrInvalidRequest       = errors.New("invalid request")
+	ErrUnavailableProcessor = errors.New("unavailable processor")
 )
 
+var HealthCheckKey = "health-check"
+
 type PaymentProcessorAdapter struct {
-	client      *http.Client
-	defaultUrl  string
-	fallbackUrl string
-	slowQueue   chan PaymentRequestProcessor
-	workers     int
+	client       *http.Client
+	db           *redis.Client
+	healthStatus *HealthCheckStatus
+	mu           sync.RWMutex
+	defaultUrl   string
+	fallbackUrl  string
+	retryQueue   chan PaymentRequestProcessor
+	workers      int
 }
 
 func NewPaymentProcessorAdapter(
 	client *http.Client,
+	db *redis.Client,
 	defaultUrl string,
 	fallbackUrl string,
-	slowQueue chan PaymentRequestProcessor,
+	retryQueue chan PaymentRequestProcessor,
 	workers int,
 ) *PaymentProcessorAdapter {
 	return &PaymentProcessorAdapter{
-		client:      client,
+		client: client,
+		db:     db,
+		healthStatus: &HealthCheckStatus{
+			Default: HealthCheckResponse{
+				Failing:         false,
+				MinResponseTime: 0,
+			},
+			Fallback: HealthCheckResponse{
+				Failing:         false,
+				MinResponseTime: 0,
+			},
+		},
 		defaultUrl:  defaultUrl,
 		fallbackUrl: fallbackUrl,
-		slowQueue:   slowQueue,
+		retryQueue:  retryQueue,
 		workers:     workers,
 	}
 }
 
 func (a *PaymentProcessorAdapter) Process(payment PaymentRequestProcessor) {
-	err := a.process(payment)
+	err := a.innerProcess(payment)
 	if err != nil {
-		a.slowQueue <- payment
+		a.retryQueue <- payment
 	}
 }
 
-func (a *PaymentProcessorAdapter) process(payment PaymentRequestProcessor) error {
-	err := a.processPaymentWithRetry(
-		payment,
-		a.defaultUrl+"/payments",
-		5,
-		time.Millisecond*20,
-		time.Millisecond*500,
-		time.Millisecond*2000,
-	)
+func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) error {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 
-	if err == nil {
-		return nil
+	var err error
+	if !a.healthStatus.Default.Failing && a.healthStatus.Default.MinResponseTime < 100 {
+		err = a.processPaymentWithRetry(
+			payment,
+			a.defaultUrl+"/payments",
+			5,
+			time.Millisecond*20,
+			time.Millisecond*500,
+			time.Millisecond*2000,
+		)
+	} else if !a.healthStatus.Fallback.Failing && a.healthStatus.Fallback.MinResponseTime < 100 {
+		err = a.processPaymentWithRetry(
+			payment,
+			a.fallbackUrl+"/payments",
+			3,
+			time.Millisecond*20,
+			time.Millisecond*1000,
+			time.Millisecond*2000,
+		)
+	} else {
+		return ErrUnavailableProcessor
 	}
-
-	slog.Debug("failed to process in the default endpoint", "err", err)
 
 	if errors.Is(err, ErrInvalidRequest) {
 		return nil
 	}
-
-	err = a.processPaymentWithRetry(
-		payment,
-		a.fallbackUrl+"/payments",
-		3,
-		time.Millisecond*20,
-		time.Millisecond*1000,
-		time.Millisecond*2000,
-	)
 
 	return err
 }
 
 func (a *PaymentProcessorAdapter) StartWorkers() {
 	for range a.workers {
-		go a.processSlowQueue()
+		go a.processRetryQueue()
 	}
 
 	go func() {
 		for {
-			slog.Info("Status of queue", "lenSlowQueue", len(a.slowQueue))
+			slog.Info("Status of queue", "lenRetryQueue", len(a.retryQueue))
 			time.Sleep(3 * time.Second)
+		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(time.Second * 5)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				res := a.db.Get(context.Background(), HealthCheckKey)
+				if res.Err() != nil {
+					slog.Debug("failed update the health check", "err", res.Err())
+					continue
+				}
+
+				resBody, err := res.Result()
+				if err != nil {
+					slog.Debug("failed update the health check", "err", res.Err())
+					continue
+
+				}
+
+				var healthCheckStatus *HealthCheckStatus
+				if err := sonic.ConfigFastest.Unmarshal([]byte(resBody), &healthCheckStatus); err != nil {
+					slog.Debug("failed update the health check", "err", err)
+					continue
+				}
+
+				a.mu.Lock()
+				a.healthStatus = healthCheckStatus
+				a.mu.Unlock()
+			}
 		}
 	}()
 }
 
-func (a *PaymentProcessorAdapter) processSlowQueue() {
-	for payment := range a.slowQueue {
-		err := a.process(payment)
-		if err != nil {
-			slog.Debug("failed to process payment again, sending back to the queue", "error", err)
-			time.Sleep(time.Second * 2)
-			a.slowQueue <- payment
-		}
+func (a *PaymentProcessorAdapter) processRetryQueue() {
+	for payment := range a.retryQueue {
+		time.Sleep(time.Second * 2)
+		a.Process(payment)
 	}
 }
 
-func (a PaymentProcessorAdapter) processPaymentWithRetry(
+func (a *PaymentProcessorAdapter) processPaymentWithRetry(
 	payment PaymentRequestProcessor,
 	url string,
 	maxRetries int,
@@ -265,4 +316,64 @@ func (a *PaymentProcessorAdapter) purge(url string, token string) error {
 	}
 
 	return nil
+}
+
+func (a *PaymentProcessorAdapter) EnableHealthCheck(should string) {
+	if should != "true" {
+		return
+	}
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				resDefault, err := a.healthCheckEndpoint(a.defaultUrl + "/payments/service-health")
+				if err != nil {
+					continue
+				}
+				resFallback, err := a.healthCheckEndpoint(a.fallbackUrl + "/payments/service-health")
+				if err != nil {
+					continue
+				}
+
+				reqbody := HealthCheckStatus{
+					resDefault,
+					resFallback,
+				}
+
+				rawBody, err := sonic.Marshal(reqbody)
+				if err != nil {
+					slog.Debug("failed to encode the json object for redis", "err", err)
+					continue
+				}
+
+				if a.db.Set(context.Background(), HealthCheckKey, rawBody, 0).Err() != nil {
+					slog.Debug("failed to save health check in redis")
+					continue
+				}
+
+				slog.Debug("updating the", "healthCheckStatus", reqbody)
+			}
+		}
+	}()
+}
+
+func (a *PaymentProcessorAdapter) healthCheckEndpoint(url string) (HealthCheckResponse, error) {
+	res, err := a.client.Get(url)
+	if res == nil || err != nil || res.StatusCode != 200 {
+		slog.Error("failed to health check", "url", url)
+		return HealthCheckResponse{}, err
+	}
+
+	var respBody HealthCheckResponse
+	decoder := sonic.ConfigFastest.NewDecoder(res.Body)
+	if err := decoder.Decode(&respBody); err != nil {
+		slog.Error("failed to parse the response", "url", url)
+		return HealthCheckResponse{}, err
+	}
+
+	return respBody, nil
 }

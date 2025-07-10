@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,11 +13,12 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
 	// TODO: Remove this after development.
-	slog.SetLogLoggerLevel(slog.LevelInfo)
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	tr := &http.Transport{
 		MaxIdleConns:        30,
@@ -43,9 +46,17 @@ func main() {
 	workers := 100
 	slowQueue := make(chan internal.PaymentRequestProcessor, 1000)
 
-	adapter := internal.NewPaymentProcessorAdapter(client, adapterDefaultUrl, adapterFallbackUrl, slowQueue, workers)
-	adapter.StartWorkers()
+	redisAddr := getEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: "",
+		DB:       0,
+	})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		panic("failed to connect to redis")
+	}
 
+	adapter := internal.NewPaymentProcessorAdapter(client, rdb, adapterDefaultUrl, adapterFallbackUrl, slowQueue, workers)
 	handler := internal.NewPaymentHandler(adapter)
 
 	app := fiber.New(fiber.Config{
@@ -63,10 +74,14 @@ func main() {
 	app.Get("/payments-summary", handler.Summary)
 	app.Post("/purge-payments", handler.Purge)
 
+	adapter.StartWorkers()
+	monitorHealth := getEnvOrSetDefault("MONITOR_HEALTH", "true")
+	adapter.EnableHealthCheck(monitorHealth)
+
 	port := getEnvOrSetDefault("PORT", "9999")
 	err := app.Listen(":" + port)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to listen to port: %v", err))
 	}
 }
 
