@@ -69,3 +69,15 @@
 **Changes**:
 - Added a channel as a queue to process if not possible as a slow queue.
 - Discovered that RFC3339Nano is better than RFC3339 to have more precision. Decrease the inconsistency from this version from 11k to 3.8k.
+
+
+# v.0.4.0 (Async)
+
+**Commit:** e556d5805b7ecbdb287bdc6858e9ad039bc8079b
+**Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
+**Load Test Result**: report_20250710_164845.html
+
+**Changes**:
+- Remove the retry logic only using the channels as a buffer to reprocess everything.
+- This is the best result so far, but still fake because of the time.Add.
+  - total_transactions_amount -> 333.9k	
