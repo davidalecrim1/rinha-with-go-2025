@@ -51,10 +51,11 @@
 
 # v.0.2.1 (Sync)
 
-**Commit:** 
+**Commit:** d57f01bbb463ed918099114c85e819d0530d9d9e
 **Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
-**Load Test Result**:
+**Load Test Result**: report_20250710_081011.html
 
 **Changes**:
 - Removed resty to do the retry logic and changed it to be only the HTTP request library. This will help me update the "requestedAt" correctly and don't affect the past. I noticed also that if the API has a latency, let's say, 200 ms, it will cause inconsistency because I will be changing the "past" over the limit of 100 ms specified in the `rinha.js` load test.
 - I still see little inconsistency. I will optimize my code to remove all inconsistencies and tune the processing.
+- This might be even worse than the one using Resty. But it was a great experience to try it out.
