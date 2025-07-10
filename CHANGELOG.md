@@ -59,3 +59,13 @@
 - Removed resty to do the retry logic and changed it to be only the HTTP request library. This will help me update the "requestedAt" correctly and don't affect the past. I noticed also that if the API has a latency, let's say, 200 ms, it will cause inconsistency because I will be changing the "past" over the limit of 100 ms specified in the `rinha.js` load test.
 - I still see little inconsistency. I will optimize my code to remove all inconsistencies and tune the processing.
 - This might be even worse than the one using Resty. But it was a great experience to try it out.
+
+# v.0.3.0 (Async)
+
+**Commit:** 467445c92f8c426ae2ceafabd1b26a12c77c8b24
+**Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
+**Load Test Result**: report_20250710_113520.html
+
+**Changes**:
+- Added a channel as a queue to process if not possible as a slow queue.
+- Discovered that RFC3339Nano is better than RFC3339 to have more precision. Decrease the inconsistency from this version from 11k to 3.8k.
