@@ -85,12 +85,10 @@
 
 # v.0.4.0 (Async)
 
-**Commit:** e556d5805b7ecbdb287bdc6858e9ad039bc8079b
+**Commit:** d4e437b2922f1658718507ff3fea8ea27da73a09
 **Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
-**Load Test Result**: report_20250710_164845.html
+**Load Test Result**: report_20250710_170003.html
 
 **Changes**:
-- Remove the retry logic only using the channels as a buffer to reprocess everything.
-- This is the best result so far, but still fake because of the time.Add.
-  - total_transactions_amount -> 333.9k	
-report_20250710_170003.html
+- Removed the time.Add and still have a great result.
+  - total_transactions_amount -> 293.7k
