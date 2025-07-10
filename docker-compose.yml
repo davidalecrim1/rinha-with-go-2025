@@ -20,6 +20,7 @@ services:
     - PORT=80
     - REDIS_ADDR=redis-db:6379
     - MONITOR_HEALTH=true
+    - ENABLE_PROFILING=false
     networks:
       - app
       - payment-processor
@@ -40,6 +41,7 @@ services:
     - PORT=80
     - REDIS_ADDR=redis-db:6379
     - MONITOR_HEALTH=false
+    - ENABLE_PROFILING=false
     networks:
       - app
       - payment-processor

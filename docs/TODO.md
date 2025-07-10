@@ -13,4 +13,5 @@
 - [x] Entender o que irá me ajudar a resetar a inconsistencia dado que ainda acontece.
 - [x] Usar um health check da API com Redis (last option).
 - [x] Revisitar o problema de inconsistencias.
-- [ ] Fazer profilling para otimizar o channel e as gouroutines.
+- [x] Fazer profilling para otimizar o channel e as gouroutines.
+- [ ] Adicionar graceful shutdown para os workers.

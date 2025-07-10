@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"runtime/pprof"
+	"runtime/trace"
 	"time"
 
 	"rinha-with-go-2025/internal"
@@ -78,6 +81,8 @@ func main() {
 	monitorHealth := utils.GetEnvOrSetDefault("MONITOR_HEALTH", "true")
 	adapter.EnableHealthCheck(monitorHealth)
 
+	performProfilling()
+
 	port := utils.GetEnvOrSetDefault("PORT", "9999")
 	err := app.Listen(":" + port)
 	if err != nil {
@@ -91,4 +96,47 @@ func sonicMarshal(v any) ([]byte, error) {
 
 func sonicUnmarshal(data []byte, v any) error {
 	return sonic.Unmarshal(data, v)
+}
+
+func performProfilling() {
+	if utils.GetEnvOrSetDefault("ENABLE_PROFILING", "false") != "true" {
+		return
+	}
+
+	slog.Info("profiling enabled")
+
+	err := os.Mkdir("prof", 0o755)
+	if err != nil {
+		slog.Error("failed to create profiling directory", "err", err)
+	}
+
+	cf, err := os.Create("./prof/cpu.prof")
+	if err != nil {
+		slog.Error("failed to start CPU profiling", "error", err)
+	}
+	pprof.StartCPUProfile(cf)
+
+	mf, err := os.Create("./prof/memory.prof")
+	if err != nil {
+		slog.Error("failed to start memory profiling", "error", err)
+	}
+	pprof.WriteHeapProfile(mf)
+
+	tc, err := os.Create("./prof/trace.prof")
+	if err != nil {
+		slog.Error("failed to start trace profiling", "error", err)
+	}
+	trace.Start(tc)
+
+	stop := time.After(time.Minute * 2)
+
+	go func() {
+		<-stop
+		pprof.StopCPUProfile()
+		trace.Stop()
+		cf.Close()
+		mf.Close()
+		tc.Close()
+		slog.Info("finished the profiling")
+	}()
 }
