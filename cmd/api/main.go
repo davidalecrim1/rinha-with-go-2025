@@ -7,8 +7,8 @@ import (
 
 	"rinha-with-go-2025/internal"
 
+	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
-	"resty.dev/v3"
 )
 
 func main() {
@@ -16,42 +16,16 @@ func main() {
 	// slog.SetLogLoggerLevel(// slog.LevelDebug)
 
 	tr := &http.Transport{
-		MaxIdleConns:        1000,
-		MaxIdleConnsPerHost: 1000,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
 		IdleConnTimeout:     120 * time.Second,
 		DisableCompression:  false,
 		ForceAttemptHTTP2:   true,
 	}
 
-	client := resty.New().
-		SetTransport(tr).
-		SetRetryCount(0) // I won't be using the retry from Resty.
-		// AddResponseMiddleware(func(c *resty.Client, resp *resty.Response) error {
-		// 	slog.Debug("Request completed",
-		// 		"method", resp.Request.Method,
-		// 		"url", resp.Request.URL,
-		// 		"status", resp.StatusCode(),
-		// 		"body", resp.String(),
-		// 	)
-		// 	return nil
-		// }).
-		// OnError(func(req *resty.Request, err error) {
-		// 	if v, ok := err.(*resty.ResponseError); ok {
-		// 		slog.Error("request failed after retries",
-		// 			"method", req.Method,
-		// 			"url", req.URL,
-		// 			"status", v.Response.StatusCode(),
-		// 			"body", v.Response.String(),
-		// 			"attempts", req.Attempt,
-		// 		)
-		// 	} else {
-		// 		slog.Error("request failed with non-retryable error",
-		// 			"method", req.Method,
-		// 			"url", req.URL,
-		// 			"error", err.Error(),
-		// 		)
-		// 	}
-		// })
+	client := &http.Client{
+		Transport: tr,
+	}
 
 	adapterDefaultUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
@@ -59,7 +33,17 @@ func main() {
 	adapter := internal.NewPaymentProcessorAdapter(client, adapterDefaultUrl, adapterFallbackUrl)
 	handler := internal.NewPaymentHandler(adapter)
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		JSONEncoder: sonicMarshal,
+		JSONDecoder: sonicUnmarshal,
+
+		Prefork:       false,
+		CaseSensitive: true,
+		StrictRouting: false,
+		ServerHeader:  "Fiber",
+		AppName:       "High Performance API",
+	})
+
 	app.Post("/payments", handler.Process)
 	app.Get("/payments-summary", handler.Summary)
 	app.Post("/purge-payments", handler.Purge)
@@ -79,4 +63,12 @@ func getEnvOrSetDefault(key string, defaultVal string) string {
 	}
 
 	return os.Getenv(key)
+}
+
+func sonicMarshal(v interface{}) ([]byte, error) {
+	return sonic.Marshal(v)
+}
+
+func sonicUnmarshal(data []byte, v interface{}) error {
+	return sonic.Unmarshal(data, v)
 }

@@ -1,13 +1,15 @@
 package internal
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"time"
 
-	"resty.dev/v3"
+	"github.com/bytedance/sonic"
 )
 
 var (
@@ -21,13 +23,13 @@ type PoolProcessor struct {
 }
 
 type PaymentProcessorAdapter struct {
-	client      *resty.Client
+	client      *http.Client
 	defaultUrl  string
 	fallbackUrl string
 }
 
 func NewPaymentProcessorAdapter(
-	client *resty.Client,
+	client *http.Client,
 	defaultUrl string,
 	fallbackUrl string,
 ) *PaymentProcessorAdapter {
@@ -43,26 +45,27 @@ func (a *PaymentProcessorAdapter) Process(ctx context.Context, payment PaymentRe
 		ctx,
 		payment,
 		a.defaultUrl+"/payments",
-		3,
-		time.Millisecond*60,
+		5,
+		time.Millisecond*40,
 		time.Millisecond*50,
 		time.Millisecond*100,
 	)
 	if err == nil {
 		return nil
 	}
+
+	// slog.Debug("failed to process in the default endpoint, fallbacking to the second", "err", err)
+
 	if errors.Is(err, ErrInvalidRequest) {
 		return err
 	}
-
-	// slog.Debug("failed to process in the default endpoint, fallbacking to the second", "err", err)
 
 	err = a.processWithRetry(
 		ctx,
 		payment,
 		a.fallbackUrl+"/payments",
 		5,
-		time.Millisecond*60,
+		time.Millisecond*40,
 		time.Millisecond*100,
 		time.Millisecond*1000,
 	)
@@ -94,25 +97,33 @@ func (a PaymentProcessorAdapter) processWithRetry(
 				return ctx.Err()
 			}
 			wait = min(wait*2, maxWait)
-			payment.UpdateRequestTime()
 		}
 
 		// slog.Debug("sending the request with retry", "attempt", attempt, "body", payment, "lastErr", lastErr, "url", url)
 
-		req := a.client.R().
-			SetContext(ctx).
-			SetHeader("Connection", "keep-alive").
-			SetHeader("Accept-Encoding", "gzip, deflate, br").
-			SetTimeout(timeout).
-			SetDoNotParseResponse(true).
-			SetBody(payment)
-
-		res, err := req.Post(url)
-		if a.isInvalidRequest(res) {
-			return ErrInvalidRequest
+		payment.UpdateRequestTime()
+		reqBody, err := sonic.Marshal(payment)
+		if err != nil {
+			return err
 		}
 
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Connection", "keep-alive")
+
+		res, err := a.client.Do(req)
 		if !a.shouldRetry(res, err) {
+			if a.isInvalidRequest(res) {
+				return ErrInvalidRequest
+			}
+
 			return err
 		}
 
@@ -122,16 +133,18 @@ func (a PaymentProcessorAdapter) processWithRetry(
 	return fmt.Errorf("payment failed after %d attempts: %w", maxRetries+1, lastErr)
 }
 
-func (a *PaymentProcessorAdapter) isInvalidRequest(res *resty.Response) bool {
-	return res.StatusCode() == 422
+func (a *PaymentProcessorAdapter) isInvalidRequest(res *http.Response) bool {
+	return res != nil && res.StatusCode == 422
 }
 
-func (a *PaymentProcessorAdapter) shouldRetry(res *resty.Response, err error) bool {
+func (a *PaymentProcessorAdapter) shouldRetry(res *http.Response, err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
+		return true
 	}
 
-	if res.StatusCode() >= 500 || res.StatusCode() == 429 || res.StatusCode() == 408 {
+	if res != nil && (res.StatusCode >= 500 ||
+		res.StatusCode == 429 ||
+		res.StatusCode == 408) {
 		return true
 	}
 
@@ -141,10 +154,12 @@ func (a *PaymentProcessorAdapter) shouldRetry(res *resty.Response, err error) bo
 func (a *PaymentProcessorAdapter) Summary(from, to, token string) (SummaryResponse, error) {
 	resDefaultBody, err := a.summary(a.defaultUrl+"/admin/payments-summary", from, to, token)
 	if err != nil {
+		// slog.Debug("failed to get summary response from default", "err", err, "resDefaultBody", resDefaultBody)
 		return SummaryResponse{}, err
 	}
 	resFallbackBody, err := a.summary(a.fallbackUrl+"/admin/payments-summary", from, to, token)
 	if err != nil {
+		// slog.Debug("failed to get summary response from fallback", "err", err, "resFallbackBody", resFallbackBody)
 		return SummaryResponse{}, err
 	}
 
@@ -154,28 +169,42 @@ func (a *PaymentProcessorAdapter) Summary(from, to, token string) (SummaryRespon
 	}, nil
 }
 
-func (a *PaymentProcessorAdapter) summary(url string, from, to, token string) (SummaryTotalRequestsResponse, error) {
-	req := a.client.R()
-	req.SetHeader("Connection", "keep-alive").
-		SetHeader("Accept-Encoding", "gzip, deflate, br").
-		SetHeader("X-Rinha-Token", token)
+func (a *PaymentProcessorAdapter) summary(rawUrl string, from, to, token string) (SummaryTotalRequestsResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	if from != "" && to != "" {
-		req.SetQueryParam("from", from)
-		req.SetQueryParam("to", to)
-	}
-
-	res, err := req.Get(url)
+	reqURL, err := url.Parse(rawUrl)
 	if err != nil {
 		return SummaryTotalRequestsResponse{}, err
 	}
-	defer res.Body.Close()
-	var resBody SummaryTotalRequestsResponse
-	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
+
+	query := reqURL.Query()
+	if from != "" && to != "" {
+		query.Set("from", from)
+		query.Set("to", to)
+	}
+	reqURL.RawQuery = query.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	if err != nil {
 		return SummaryTotalRequestsResponse{}, err
 	}
 
-	return resBody, nil
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("X-Rinha-Token", token)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return SummaryTotalRequestsResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	var parsed SummaryTotalRequestsResponse
+	if err = sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return SummaryTotalRequestsResponse{}, err
+	}
+
+	return parsed, nil
 }
 
 func (a *PaymentProcessorAdapter) Purge(token string) error {
@@ -190,15 +219,24 @@ func (a *PaymentProcessorAdapter) Purge(token string) error {
 }
 
 func (a *PaymentProcessorAdapter) purge(url string, token string) error {
-	res, err := a.client.R().
-		SetHeader("X-Rinha-Token", token).
-		Post(url)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("X-Rinha-Token", token)
+
+	res, err := a.client.Do(req)
 	if err != nil {
 		// slog.Error("failed to purge the api", "error", err, "url", url)
 		return err
 	}
+	defer res.Body.Close()
 
-	if res.StatusCode() != 200 {
+	if res.StatusCode != 200 {
 		return ErrInvalidRequest
 	}
 

@@ -7,8 +7,10 @@
 - [x] Criar uma versão para rodar com docker e nginx.
 - [x] Remover o Resty e colocar minha própria logica de retry dado os problemas com o UpdateRequestedAt e testar.
 - [x] Remover os logs da versão final.
-- [ ] Otimizar usando Sonic e net/http para cortar o máximo possivel de ms e evitar inconsistencias.
+- [x] Otimizar usando Sonic e net/http para cortar o máximo possivel de ms e evitar inconsistencias.
+- [ ] Considerrar um sync.Pool para ajudar na performance.
 - [ ] Usar um channel para retry mais longo de forma async.
+- [ ] Entender o que irá me ajudar a resetar a inconsistencia dado que ainda acontece.
 - [ ] Usar um health check da API com Redis (last option).
 
 

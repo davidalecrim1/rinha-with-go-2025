@@ -1,6 +1,10 @@
 package internal
 
-import "time"
+import (
+	"time"
+
+	"rinha-with-go-2025/pkg/parser"
+)
 
 type PaymentRequest struct {
 	CorrelationId string  `json:"correlationId"`
@@ -13,7 +17,7 @@ type PaymentRequestProcessor struct {
 }
 
 func (p *PaymentRequestProcessor) UpdateRequestTime() {
-	p.RequestedAt = time.Now().UTC().Format(time.RFC3339)
+	p.RequestedAt = parser.FormatRFC3339(time.Now())
 }
 
 type SummaryResponse struct {
