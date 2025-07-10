@@ -43,8 +43,8 @@ func main() {
 	adapterDefaultUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
 
-	workers := 100
-	slowQueue := make(chan internal.PaymentRequestProcessor, 1000)
+	workers := 5000
+	slowQueue := make(chan internal.PaymentRequestProcessor, 5000)
 
 	redisAddr := getEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
 	rdb := redis.NewClient(&redis.Options{
