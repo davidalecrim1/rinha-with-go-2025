@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -75,22 +74,16 @@ func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) 
 
 	var err error
 	if !a.healthStatus.Default.Failing && a.healthStatus.Default.MinResponseTime < 100 {
-		err = a.processPaymentWithRetry(
+		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
-			5,
-			time.Millisecond*20,
-			time.Millisecond*500,
-			time.Millisecond*2000,
+			time.Millisecond*100,
 		)
 	} else if !a.healthStatus.Fallback.Failing && a.healthStatus.Fallback.MinResponseTime < 100 {
-		err = a.processPaymentWithRetry(
+		err = a.sendPayment(
 			payment,
 			a.fallbackUrl+"/payments",
-			3,
-			time.Millisecond*20,
-			time.Millisecond*1000,
-			time.Millisecond*2000,
+			time.Millisecond*100,
 		)
 	} else {
 		return ErrUnavailableProcessor
@@ -103,127 +96,47 @@ func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) 
 	return err
 }
 
-func (a *PaymentProcessorAdapter) StartWorkers() {
-	for range a.workers {
-		go a.processRetryQueue()
-	}
-
-	go func() {
-		for {
-			slog.Info("Status of queue", "lenRetryQueue", len(a.retryQueue))
-			time.Sleep(3 * time.Second)
-		}
-	}()
-
-	go func() {
-		ticker := time.NewTicker(time.Second * 5)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				res := a.db.Get(context.Background(), HealthCheckKey)
-				if res.Err() != nil {
-					slog.Debug("failed update the health check", "err", res.Err())
-					continue
-				}
-
-				resBody, err := res.Result()
-				if err != nil {
-					slog.Debug("failed update the health check", "err", res.Err())
-					continue
-
-				}
-
-				var healthCheckStatus *HealthCheckStatus
-				if err := sonic.ConfigFastest.Unmarshal([]byte(resBody), &healthCheckStatus); err != nil {
-					slog.Debug("failed update the health check", "err", err)
-					continue
-				}
-
-				a.mu.Lock()
-				a.healthStatus = healthCheckStatus
-				a.mu.Unlock()
-			}
-		}
-	}()
-}
-
-func (a *PaymentProcessorAdapter) processRetryQueue() {
-	for payment := range a.retryQueue {
-		time.Sleep(time.Second * 1)
-		a.Process(payment)
-	}
-}
-
-func (a *PaymentProcessorAdapter) processPaymentWithRetry(
+func (a *PaymentProcessorAdapter) sendPayment(
 	payment PaymentRequestProcessor,
 	url string,
-	maxRetries int,
 	timeout time.Duration,
-	minWait time.Duration,
-	maxWait time.Duration,
 ) error {
-	var lastErr error
-	wait := minWait
+	slog.Debug("sending the request", "body", payment, "url", url)
 
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 {
-			time.Sleep(wait)
-			wait = min(wait*2, maxWait)
-		}
-
-		slog.Debug("sending the request with retry", "attempt", attempt, "body", payment, "lastErr", lastErr, "url", url)
-
-		payment.UpdateRequestTime()
-		reqBody, err := sonic.ConfigFastest.Marshal(payment)
-		if err != nil {
-			return err
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
-		if err != nil {
-			return err
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Connection", "keep-alive")
-
-		res, err := a.client.Do(req)
-		slog.Debug("response from api", "url", url, "res", res)
-		if !a.shouldRetry(res, err) {
-			if a.isInvalidRequest(res) {
-				return ErrInvalidRequest
-			}
-
-			return err
-		}
-
-		lastErr = err
+	payment.UpdateRequestTime()
+	reqBody, err := sonic.ConfigFastest.Marshal(payment)
+	if err != nil {
+		return err
 	}
 
-	return fmt.Errorf("payment failed after %d attempts: %w", maxRetries+1, lastErr)
-}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-func (a *PaymentProcessorAdapter) isInvalidRequest(res *http.Response) bool {
-	return res != nil && res.StatusCode == 422
-}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
+	if err != nil {
+		return err
+	}
 
-func (a *PaymentProcessorAdapter) shouldRetry(res *http.Response, err error) bool {
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Connection", "keep-alive")
+
+	res, err := a.client.Do(req)
+	slog.Debug("response from api", "url", url, "res", res)
+	if res != nil && res.StatusCode == 422 {
+		return nil
+	}
+
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return true
+		return ErrUnavailableProcessor
 	}
 
 	if res != nil && (res.StatusCode >= 500 ||
 		res.StatusCode == 429 ||
 		res.StatusCode == 408) {
-		return true
+		return ErrUnavailableProcessor
 	}
 
-	return false
+	return nil
 }
 
 func (a *PaymentProcessorAdapter) Summary(from, to, token string) (SummaryResponse, error) {
@@ -327,36 +240,31 @@ func (a *PaymentProcessorAdapter) EnableHealthCheck(should string) {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
-				resDefault, err := a.healthCheckEndpoint(a.defaultUrl + "/payments/service-health")
-				if err != nil {
-					continue
-				}
-				resFallback, err := a.healthCheckEndpoint(a.fallbackUrl + "/payments/service-health")
-				if err != nil {
-					continue
-				}
-
-				reqbody := HealthCheckStatus{
-					resDefault,
-					resFallback,
-				}
-
-				rawBody, err := sonic.Marshal(reqbody)
-				if err != nil {
-					slog.Debug("failed to encode the json object for redis", "err", err)
-					continue
-				}
-
-				if a.db.Set(context.Background(), HealthCheckKey, rawBody, 0).Err() != nil {
-					slog.Debug("failed to save health check in redis")
-					continue
-				}
-
-				slog.Debug("updating the", "healthCheckStatus", reqbody)
+		for range ticker.C {
+			resDefault, err := a.healthCheckEndpoint(a.defaultUrl + "/payments/service-health")
+			if err != nil {
+				continue
 			}
+			resFallback, err := a.healthCheckEndpoint(a.fallbackUrl + "/payments/service-health")
+			if err != nil {
+				continue
+			}
+
+			reqbody := HealthCheckStatus{
+				resDefault,
+				resFallback,
+			}
+			rawBody, err := sonic.Marshal(reqbody)
+			if err != nil {
+				slog.Debug("failed to encode the json object for redis", "err", err)
+				continue
+			}
+			if a.db.Set(context.Background(), HealthCheckKey, rawBody, 0).Err() != nil {
+				slog.Debug("failed to save health check in redis")
+				continue
+			}
+
+			slog.Debug("updating the", "healthCheckStatus", reqbody)
 		}
 	}()
 }
@@ -376,4 +284,54 @@ func (a *PaymentProcessorAdapter) healthCheckEndpoint(url string) (HealthCheckRe
 	}
 
 	return respBody, nil
+}
+
+func (a *PaymentProcessorAdapter) StartWorkers() {
+	for range a.workers {
+		go a.retryWorkers()
+	}
+
+	go func() {
+		for {
+			slog.Info("Status of queue", "lenRetryQueue", len(a.retryQueue))
+			time.Sleep(3 * time.Second)
+		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(time.Second * 5)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			res := a.db.Get(context.Background(), HealthCheckKey)
+			if res.Err() != nil {
+				slog.Debug("failed update the health check", "err", res.Err())
+				continue
+			}
+
+			resBody, err := res.Result()
+			if err != nil {
+				slog.Debug("failed update the health check", "err", res.Err())
+				continue
+
+			}
+
+			var healthCheckStatus *HealthCheckStatus
+			if err := sonic.ConfigFastest.Unmarshal([]byte(resBody), &healthCheckStatus); err != nil {
+				slog.Debug("failed update the health check", "err", err)
+				continue
+			}
+
+			a.mu.Lock()
+			a.healthStatus = healthCheckStatus
+			a.mu.Unlock()
+		}
+	}()
+}
+
+func (a *PaymentProcessorAdapter) retryWorkers() {
+	for payment := range a.retryQueue {
+		time.Sleep(time.Second * 1)
+		a.Process(payment)
+	}
 }

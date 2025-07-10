@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"time"
 
 	"rinha-with-go-2025/internal"
+	"rinha-with-go-2025/pkg/utils"
 
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
@@ -18,7 +18,7 @@ import (
 
 func main() {
 	// TODO: Remove this after development.
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.SetLogLoggerLevel(slog.LevelInfo)
 
 	tr := &http.Transport{
 		MaxIdleConns:        30,
@@ -40,13 +40,13 @@ func main() {
 		Transport: tr,
 	}
 
-	adapterDefaultUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
-	adapterFallbackUrl := getEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
+	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
+	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
 
 	workers := 5000
 	slowQueue := make(chan internal.PaymentRequestProcessor, 5000)
 
-	redisAddr := getEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
+	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
 		Password: "",
@@ -75,23 +75,14 @@ func main() {
 	app.Post("/purge-payments", handler.Purge)
 
 	adapter.StartWorkers()
-	monitorHealth := getEnvOrSetDefault("MONITOR_HEALTH", "true")
+	monitorHealth := utils.GetEnvOrSetDefault("MONITOR_HEALTH", "true")
 	adapter.EnableHealthCheck(monitorHealth)
 
-	port := getEnvOrSetDefault("PORT", "9999")
+	port := utils.GetEnvOrSetDefault("PORT", "9999")
 	err := app.Listen(":" + port)
 	if err != nil {
 		panic(fmt.Errorf("failed to listen to port: %v", err))
 	}
-}
-
-func getEnvOrSetDefault(key string, defaultVal string) string {
-	if os.Getenv(key) == "" {
-		os.Setenv(key, defaultVal)
-		return defaultVal
-	}
-
-	return os.Getenv(key)
 }
 
 func sonicMarshal(v any) ([]byte, error) {
