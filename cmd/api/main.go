@@ -78,10 +78,12 @@ func main() {
 	app.Post("/purge-payments", handler.Purge)
 
 	adapter.StartWorkers()
-	monitorHealth := utils.GetEnvOrSetDefault("MONITOR_HEALTH", "true")
-	adapter.EnableHealthCheck(monitorHealth)
 
-	performProfilling()
+	shoudMonitorHealth := utils.GetEnvOrSetDefault("MONITOR_HEALTH", "true")
+	adapter.EnableHealthCheck(shoudMonitorHealth)
+
+	shoudProfile := utils.GetEnvOrSetDefault("ENABLE_PROFILING", "false")
+	performProfilling(shoudProfile)
 
 	port := utils.GetEnvOrSetDefault("PORT", "9999")
 	err := app.Listen(":" + port)
@@ -98,8 +100,8 @@ func sonicUnmarshal(data []byte, v any) error {
 	return sonic.Unmarshal(data, v)
 }
 
-func performProfilling() {
-	if utils.GetEnvOrSetDefault("ENABLE_PROFILING", "false") != "true" {
+func performProfilling(shouldProfile string) {
+	if shouldProfile != "true" {
 		return
 	}
 

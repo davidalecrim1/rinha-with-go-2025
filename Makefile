@@ -12,7 +12,10 @@ run-one-instance-local:
 	docker compose -f rinha-docker-compose-arm64.yml restart && air . 
 
 run-docker:
-	docker compose -f rinha-docker-compose-arm64.yml restart && docker compose up --build -d
+	make run-processor && docker compose up --build -d
+
+run-processor:
+	docker compose -f rinha-docker-compose-arm64.yml up -d
 
 profiling-cpu:
 	go tool pprof -http=:8080 ./docs/profiling/cpu.prof
@@ -22,4 +25,10 @@ profiling-memory:
 
 profiling-trace:
 	go tool trace ./docs/profiling/trace.prof
+
+build-docker:
+	docker build -t davidalecrim1/rinha-with-go-2025:latest .
+
+push-image:
+	docker push davidalecrim1/rinha-with-go-2025:latest
 
