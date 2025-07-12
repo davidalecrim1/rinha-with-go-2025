@@ -79,14 +79,14 @@ func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) 
 		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
-			time.Millisecond*80,
+			time.Second*100,
 			PaymentEndpointDefault,
 		)
 	} else if !a.healthStatus.Fallback.Failing && a.healthStatus.Fallback.MinResponseTime < 100 {
 		err = a.sendPayment(
 			payment,
 			a.fallbackUrl+"/payments",
-			time.Millisecond*80,
+			time.Second*1,
 			PaymentEndpointFallback,
 		)
 	} else {
@@ -126,13 +126,10 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	req.Header.Set("Connection", "keep-alive")
 
 	res, err := a.client.Do(req)
-	slog.Debug("response from api", "url", url, "res", res)
+	slog.Debug("response from api", "url", url, "res", res, "payment", payment)
+
 	if res != nil && res.StatusCode == 422 {
 		return nil
-	}
-
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return ErrUnavailableProcessor
 	}
 
 	if res != nil && (res.StatusCode >= 500 ||
@@ -141,12 +138,11 @@ func (a *PaymentProcessorAdapter) sendPayment(
 		return ErrUnavailableProcessor
 	}
 
-	err = a.repo.Add(PaymentProcessed{
-		payment,
-		endpoint,
-	})
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return ErrUnavailableProcessor
+	}
 
-	return err
+	return a.repo.Add(payment, endpoint)
 }
 
 func (a *PaymentProcessorAdapter) Summary(from, to string) (SummaryResponse, error) {

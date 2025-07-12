@@ -17,12 +17,12 @@ type PaymentRequest struct {
 }
 
 type PaymentRequestProcessor struct {
-	PaymentRequest
-	RequestedAt *string `json:"requestedAt"`
+	PaymentRequest `json:",inline"`
+	RequestedAt    *string `json:"requestedAt,omitempty"`
 }
 
 func (p *PaymentRequestProcessor) UpdateRequestTime() {
-	requestedAt := time.Now().UTC().Format(time.RFC3339Nano) // TODO: Remove the seconds
+	requestedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	p.RequestedAt = &requestedAt
 }
 
@@ -50,9 +50,4 @@ type HealthCheckResponse struct {
 type HealthCheckStatus struct {
 	Default  HealthCheckResponse `json:"default"`
 	Fallback HealthCheckResponse `json:"fallback"`
-}
-
-type PaymentProcessed struct {
-	PaymentRequestProcessor
-	Processed PaymentEndpoint `json:"processed"`
 }

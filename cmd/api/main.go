@@ -17,11 +17,14 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
 	// TODO: Remove this after development.
 	slog.SetLogLoggerLevel(slog.LevelInfo)
+	ctx := context.Background()
 
 	tr := &http.Transport{
 		MaxIdleConns:        30,
@@ -38,10 +41,32 @@ func main() {
 			DualStack: true,             // Enable IPv4/IPv6
 		}).DialContext,
 	}
-
 	client := &http.Client{
 		Transport: tr,
 	}
+
+	endpoint := utils.GetEnvOrSetDefault("MONGO_ENDPOINT", "localhost:27017")
+	if endpoint == "" {
+		panic("the mongo db endpoint is not provided")
+	}
+
+	opts := options.
+		Client().
+		ApplyURI(endpoint).
+		SetServerSelectionTimeout(time.Second * 5)
+	mdbClient, err := mongo.Connect(ctx, opts)
+	if err != nil {
+		panic(fmt.Sprintf("failed to connect to mongodb: %v", err))
+	}
+	err = mdbClient.Ping(ctx, nil)
+	if err != nil {
+		panic(fmt.Sprintf("failed to ping mongodb: %v", err))
+	}
+	mdb := mdbClient.Database(utils.GetEnvOrSetDefault("MONGO_DATABASE", "payments-db"))
+
+	repo := internal.NewPaymentRepository(mdb)
+	workers := 5000
+	slowQueue := make(chan internal.PaymentRequestProcessor, 5000)
 
 	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
 	rdb := redis.NewClient(&redis.Options{
@@ -53,12 +78,8 @@ func main() {
 		panic("failed to connect to redis")
 	}
 
-	repo := internal.NewPaymentRepository(rdb)
 	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
-	workers := 5000
-	slowQueue := make(chan internal.PaymentRequestProcessor, 5000)
-
 	adapter := internal.NewPaymentProcessorAdapter(
 		client,
 		rdb,
@@ -94,7 +115,7 @@ func main() {
 	adapter.StartWorkers()
 
 	port := utils.GetEnvOrSetDefault("PORT", "9999")
-	err := app.Listen(":" + port)
+	err = app.Listen(":" + port)
 	if err != nil {
 		panic(fmt.Errorf("failed to listen to port: %v", err))
 	}
