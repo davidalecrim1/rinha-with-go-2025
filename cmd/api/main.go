@@ -43,12 +43,6 @@ func main() {
 		Transport: tr,
 	}
 
-	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
-	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
-
-	workers := 5000
-	slowQueue := make(chan internal.PaymentRequestProcessor, 5000)
-
 	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
@@ -59,9 +53,23 @@ func main() {
 		panic("failed to connect to redis")
 	}
 
-	adapter := internal.NewPaymentProcessorAdapter(client, rdb, adapterDefaultUrl, adapterFallbackUrl, slowQueue, workers)
-	handler := internal.NewPaymentHandler(adapter)
+	repo := internal.NewPaymentRepository(rdb)
+	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
+	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
+	workers := 5000
+	slowQueue := make(chan internal.PaymentRequestProcessor, 5000)
 
+	adapter := internal.NewPaymentProcessorAdapter(
+		client,
+		rdb,
+		repo,
+		adapterDefaultUrl,
+		adapterFallbackUrl,
+		slowQueue,
+		workers,
+	)
+
+	handler := internal.NewPaymentHandler(adapter)
 	app := fiber.New(fiber.Config{
 		JSONEncoder: sonicMarshal,
 		JSONDecoder: sonicUnmarshal,
@@ -77,13 +85,13 @@ func main() {
 	app.Get("/payments-summary", handler.Summary)
 	app.Post("/purge-payments", handler.Purge)
 
+	shouldMonitorHealth := utils.GetEnvOrSetDefault("MONITOR_HEALTH", "true")
+	adapter.EnableHealthCheck(shouldMonitorHealth)
+
+	shouldProfile := utils.GetEnvOrSetDefault("ENABLE_PROFILING", "false")
+	enableProfiling(shouldProfile)
+
 	adapter.StartWorkers()
-
-	shoudMonitorHealth := utils.GetEnvOrSetDefault("MONITOR_HEALTH", "true")
-	adapter.EnableHealthCheck(shoudMonitorHealth)
-
-	shoudProfile := utils.GetEnvOrSetDefault("ENABLE_PROFILING", "false")
-	performProfilling(shoudProfile)
 
 	port := utils.GetEnvOrSetDefault("PORT", "9999")
 	err := app.Listen(":" + port)
@@ -100,7 +108,7 @@ func sonicUnmarshal(data []byte, v any) error {
 	return sonic.Unmarshal(data, v)
 }
 
-func performProfilling(shouldProfile string) {
+func enableProfiling(shouldProfile string) {
 	if shouldProfile != "true" {
 		return
 	}

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -25,6 +24,7 @@ var HealthCheckKey = "health-check"
 type PaymentProcessorAdapter struct {
 	client       *http.Client
 	db           *redis.Client
+	repo         *PaymentRepository
 	healthStatus *HealthCheckStatus
 	mu           sync.RWMutex
 	defaultUrl   string
@@ -36,6 +36,7 @@ type PaymentProcessorAdapter struct {
 func NewPaymentProcessorAdapter(
 	client *http.Client,
 	db *redis.Client,
+	repo *PaymentRepository,
 	defaultUrl string,
 	fallbackUrl string,
 	retryQueue chan PaymentRequestProcessor,
@@ -44,6 +45,7 @@ func NewPaymentProcessorAdapter(
 	return &PaymentProcessorAdapter{
 		client: client,
 		db:     db,
+		repo:   repo,
 		healthStatus: &HealthCheckStatus{
 			Default: HealthCheckResponse{
 				Failing:         false,
@@ -77,13 +79,15 @@ func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) 
 		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
-			time.Millisecond*100,
+			time.Millisecond*80,
+			PaymentEndpointDefault,
 		)
 	} else if !a.healthStatus.Fallback.Failing && a.healthStatus.Fallback.MinResponseTime < 100 {
 		err = a.sendPayment(
 			payment,
 			a.fallbackUrl+"/payments",
-			time.Millisecond*100,
+			time.Millisecond*80,
+			PaymentEndpointFallback,
 		)
 	} else {
 		return ErrUnavailableProcessor
@@ -100,6 +104,7 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	payment PaymentRequestProcessor,
 	url string,
 	timeout time.Duration,
+	endpoint PaymentEndpoint,
 ) error {
 	slog.Debug("sending the request", "body", payment, "url", url)
 
@@ -136,66 +141,22 @@ func (a *PaymentProcessorAdapter) sendPayment(
 		return ErrUnavailableProcessor
 	}
 
-	return nil
+	err = a.repo.Add(PaymentProcessed{
+		payment,
+		endpoint,
+	})
+
+	return err
 }
 
-func (a *PaymentProcessorAdapter) Summary(from, to, token string) (SummaryResponse, error) {
-	resDefaultBody, err := a.summary(a.defaultUrl+"/admin/payments-summary", from, to, token)
-	if err != nil {
-		slog.Debug("failed to get summary response from default", "err", err, "resDefaultBody", resDefaultBody)
-		return SummaryResponse{}, err
-	}
-	resFallbackBody, err := a.summary(a.fallbackUrl+"/admin/payments-summary", from, to, token)
-	if err != nil {
-		slog.Debug("failed to get summary response from fallback", "err", err, "resFallbackBody", resFallbackBody)
-		return SummaryResponse{}, err
-	}
-
-	return SummaryResponse{
-		DefaultSummary:  resDefaultBody,
-		FallbackSummary: resFallbackBody,
-	}, nil
-}
-
-func (a *PaymentProcessorAdapter) summary(rawUrl string, from, to, token string) (SummaryTotalRequestsResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	reqURL, err := url.Parse(rawUrl)
-	if err != nil {
-		return SummaryTotalRequestsResponse{}, err
-	}
-
-	query := reqURL.Query()
-	if from != "" && to != "" {
-		query.Set("from", from)
-		query.Set("to", to)
-	}
-	reqURL.RawQuery = query.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
-	if err != nil {
-		return SummaryTotalRequestsResponse{}, err
-	}
-
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("X-Rinha-Token", token)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return SummaryTotalRequestsResponse{}, err
-	}
-	defer resp.Body.Close()
-
-	var parsed SummaryTotalRequestsResponse
-	if err = sonic.ConfigFastest.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return SummaryTotalRequestsResponse{}, err
-	}
-
-	return parsed, nil
+func (a *PaymentProcessorAdapter) Summary(from, to string) (SummaryResponse, error) {
+	return a.repo.Summary(from, to)
 }
 
 func (a *PaymentProcessorAdapter) Purge(token string) error {
+	if err := a.repo.Purge(); err != nil {
+		return err
+	}
 	if err := a.purge(a.defaultUrl+"/admin/purge-payments", token); err != nil {
 		return err
 	}
@@ -293,7 +254,7 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 
 	go func() {
 		for {
-			slog.Info("Status of queue", "lenRetryQueue", len(a.retryQueue))
+			slog.Debug("Status of queue", "lenRetryQueue", len(a.retryQueue))
 			time.Sleep(3 * time.Second)
 		}
 	}()

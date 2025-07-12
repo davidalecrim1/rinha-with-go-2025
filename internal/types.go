@@ -4,6 +4,13 @@ import (
 	"time"
 )
 
+type PaymentEndpoint = string
+
+var (
+	PaymentEndpointDefault  PaymentEndpoint = "default"
+	PaymentEndpointFallback PaymentEndpoint = "fallback"
+)
+
 type PaymentRequest struct {
 	CorrelationId string  `json:"correlationId"`
 	Amount        float64 `json:"amount"`
@@ -43,4 +50,9 @@ type HealthCheckResponse struct {
 type HealthCheckStatus struct {
 	Default  HealthCheckResponse `json:"default"`
 	Fallback HealthCheckResponse `json:"fallback"`
+}
+
+type PaymentProcessed struct {
+	PaymentRequestProcessor
+	Processed PaymentEndpoint `json:"processed"`
 }

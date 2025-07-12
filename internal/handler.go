@@ -36,13 +36,8 @@ func (h *PaymentHandler) Process(c *fiber.Ctx) error {
 func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
-	tokenStr := c.Get("X-Rinha-Token")
 
-	if tokenStr == "" {
-		tokenStr = "123"
-	}
-
-	summary, err := h.a.Summary(fromStr, toStr, tokenStr)
+	summary, err := h.a.Summary(fromStr, toStr)
 	if err != nil {
 		return c.SendStatus(http.StatusInternalServerError)
 	}

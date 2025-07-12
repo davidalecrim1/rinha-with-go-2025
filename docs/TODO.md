@@ -14,4 +14,6 @@
 - [x] Usar um health check da API com Redis (last option).
 - [x] Revisitar o problema de inconsistencias.
 - [x] Fazer profilling para otimizar o channel e as gouroutines.
+- [ ] Adicionar um banco de dados dado minha confusão com os endpoints admin.
+- [ ] Entender se usarei Redis ou Mongo.
 - [ ] Adicionar graceful shutdown para os workers.
