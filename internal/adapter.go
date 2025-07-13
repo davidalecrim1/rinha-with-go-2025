@@ -79,14 +79,14 @@ func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) 
 		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
-			time.Second*100,
+			time.Second*10,
 			PaymentEndpointDefault,
 		)
 	} else if !a.healthStatus.Fallback.Failing && a.healthStatus.Fallback.MinResponseTime < 100 {
 		err = a.sendPayment(
 			payment,
 			a.fallbackUrl+"/payments",
-			time.Second*1,
+			time.Second*10,
 			PaymentEndpointFallback,
 		)
 	} else {

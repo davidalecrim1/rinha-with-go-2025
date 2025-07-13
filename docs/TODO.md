@@ -17,4 +17,5 @@
 - [x] Adicionar um banco de dados dado minha confusão com os endpoints admin.
 - [x] Entender se usarei Redis ou Mongo.
 - [ ] Entender melhor o consumo de memoria do meu app.
+- [ ] Criar uma imagem para amd64 para submissão.
 - [ ] Adicionar graceful shutdown para os workers.
