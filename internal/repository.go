@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"math"
 	"time"
 
 	"rinha-with-go-2025/pkg/utils"
@@ -42,11 +43,16 @@ func (r *PaymentRepository) Add(payment PaymentProcessed) error {
 }
 
 func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, error) {
-	fallbackTotalRequests := 0
-	fallbackTotalAmount := 0.0
-
-	defaultTotalRequests := 0
-	defaultTotalAmount := 0.0
+	response := SummaryResponse{
+		DefaultSummary: SummaryTotalRequestsResponse{
+			TotalRequests: 0,
+			TotalAmount:   0.0,
+		},
+		FallbackSummary: SummaryTotalRequestsResponse{
+			TotalRequests: 0,
+			TotalAmount:   0.0,
+		},
+	}
 
 	var from, to time.Time
 	filterByTime := false
@@ -89,25 +95,18 @@ func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, err
 		}
 
 		if payment.Processed == PaymentEndpointDefault {
-			defaultTotalAmount += payment.Amount
-			defaultTotalRequests++
+			response.DefaultSummary.TotalAmount += payment.Amount
+			response.DefaultSummary.TotalRequests++
 		}
 		if payment.Processed == PaymentEndpointFallback {
-			fallbackTotalAmount += payment.Amount
-			fallbackTotalRequests++
+			response.FallbackSummary.TotalAmount += payment.Amount
+			response.FallbackSummary.TotalRequests++
 		}
 	}
 
-	return SummaryResponse{
-		DefaultSummary: SummaryTotalRequestsResponse{
-			TotalRequests: defaultTotalRequests,
-			TotalAmount:   defaultTotalAmount,
-		},
-		FallbackSummary: SummaryTotalRequestsResponse{
-			TotalRequests: fallbackTotalRequests,
-			TotalAmount:   fallbackTotalAmount,
-		},
-	}, nil
+	response.DefaultSummary.TotalAmount = math.Round(response.DefaultSummary.TotalAmount*100) / 100
+	response.FallbackSummary.TotalAmount = math.Round(response.FallbackSummary.TotalAmount*100) / 100
+	return response, nil
 }
 
 func (r *PaymentRepository) Purge() error {
