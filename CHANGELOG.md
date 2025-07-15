@@ -5,6 +5,7 @@
 **Load Test Result**: report_20250707_162657.html
 
 **Changes**:
+
 - If both default and fallback are failing. The API will return 500 after about 16 seconds considering the current retry logic.
 - The current configuration considers that the **clientDefault** with Resty with retry faster. The **clientFallback** with retry slower.
 
@@ -15,6 +16,7 @@
 **Load Test Result**: report_20250707_163719.html
 
 **Changes**:
+
 - Short the retries logic considering the timeout of the load test.
 - Seeing the current logic of the K6 script. This won't be enough to ensure no requests are lost.
 
@@ -25,6 +27,7 @@
 **Load Test Result**: report_20250708_074357.html
 
 **Changes**:
+
 - Create three workers pools. One being hot to process in the default URL. One that is cool to process in the fallback URL. One that is cold to retry on both doing round robin and the best to not lose the connection.
 - This current version is running with all the computing power from my computer. The next version should be tuned for the infrastructure restrictions.
 - I still see some inconsistency in this version: balance_inconsistency_amount -> 79.6
@@ -36,6 +39,7 @@
 **Load Test Result**: report_20250709_070021.html
 
 **Changes**:
+
 - Using Docker, the inconsistency is too high. Even greater than the synchronous version: balance_inconsistency_amount -> 9.3k. Sometimes this was lower, but still high (3.7k).
 
 # v.0.2.0 (Sync)
@@ -45,6 +49,7 @@
 **Load Test Result**: report_20250709_072736.html
 
 **Changes**:
+
 - This still has inconsistency probably cause of the requests failure to process on the default or fallback:
 - balance_inconsistency_amount -> 199
 - I discovered that the balance inconsistency can happen because I might send request that have the requestedAt in the past and cause the balance to be different when the load test calls the endpoints from the 3 APIs. Therefore I'm affecting the past and causing inconsistency.
@@ -56,6 +61,7 @@
 **Load Test Result**: report_20250710_081011.html
 
 **Changes**:
+
 - Removed resty to do the retry logic and changed it to be only the HTTP request library. This will help me update the "requestedAt" correctly and don't affect the past. I noticed also that if the API has a latency, let's say, 200 ms, it will cause inconsistency because I will be changing the "past" over the limit of 100 ms specified in the `rinha.js` load test.
 - I still see little inconsistency. I will optimize my code to remove all inconsistencies and tune the processing.
 - This might be even worse than the one using Resty. But it was a great experience to try it out.
@@ -67,9 +73,9 @@
 **Load Test Result**: report_20250710_113520.html
 
 **Changes**:
+
 - Added a channel as a queue to process if not possible as a slow queue.
 - Discovered that RFC3339Nano is better than RFC3339 to have more precision. Decrease the inconsistency from this version from 11k to 3.8k.
-
 
 # v.0.4.0 (Async)
 
@@ -78,10 +84,10 @@
 **Load Test Result**: report_20250710_164845.html
 
 **Changes**:
+
 - Remove the retry logic only using the channels as a buffer to reprocess everything.
 - This is the best result so far, but still fake because of the time.Add.
-  - total_transactions_amount -> 333.9k	
-
+  - total_transactions_amount -> 333.9k
 
 # v.0.4.0 (Async)
 
@@ -90,5 +96,16 @@
 **Load Test Result**: report_20250710_170003.html
 
 **Changes**:
+
 - Removed the time.Add and still have a great result.
   - total_transactions_amount -> 293.7k
+
+# v.0.6.0 (Async - Redis)
+
+**Commit:** 1f03a873a74085c79a0c196ef539765c36cfea4a
+**Load Test Commit Version**: c1fef63d23ee7cab54ebd1fd03cb20565536947c
+**Load Test Result**:
+
+**Changes**:
+
+- Using the partial results, I see that the precision problem was an actual thing and I needed to fix it. Therefore I ajusted it in the summary.
