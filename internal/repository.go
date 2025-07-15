@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"log/slog"
+	"math"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -136,6 +137,8 @@ func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, err
 		}
 	}
 
+	response.DefaultSummary.TotalAmount = math.Round(response.DefaultSummary.TotalAmount*100) / 100
+	response.FallbackSummary.TotalAmount = math.Round(response.FallbackSummary.TotalAmount*100) / 100
 	return response, nil
 }
 
