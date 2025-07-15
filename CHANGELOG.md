@@ -111,3 +111,13 @@
 - I discovered I made a mistake using /admin endpoints to get the summary, so I fallback to use a database to save my transactions. I first tried Redis, but end up using MongoDB because of an inconsistency bug I was having. The bug was that I could cancel a request after 100ms, but the result was being processed by the external API, and no being saved in mine. After I increased the timeout to 1 second, that was solved (for my surprise, because I thought that would cause inconsistency given the requestedAt field).
 - total_transactions_amount: 302.6k
 - balance_inconsistency_amount: 0
+
+# v.0.6.0 (Async - MongoDB)
+
+**Commit:** c97b5a226ed3e9277c09740b443ef66549da5790
+**Load Test Commit Version**: c1fef63d23ee7cab54ebd1fd03cb20565536947c
+**Load Test Result**: report_20250715_072137.html
+
+**Changes**:
+
+- Using the partial results, I see that the precision problem was an actual thing and I needed to fix it. Therefore I ajusted it in the summary.
