@@ -18,13 +18,13 @@ run-processor:
 	docker compose -f rinha-docker-compose-arm64.yml up -d
 
 profiling-cpu:
-	go tool pprof -http=:8080 ./docs/profiling/cpu.prof
+	go tool pprof -http=:8080 ./docs/profiling/go-backend-1/cpu.prof
 
 profiling-memory:
-	go tool pprof -http=:8081 ./docs/profiling/memory.prof
+	go tool pprof -http=:8081 ./docs/profiling/go-backend-1/memory.prof
 
 profiling-trace:
-	go tool trace ./docs/profiling/trace.prof
+	go tool trace ./docs/profiling/go-backend-1/trace.prof
 
 build-docker:
 	docker build -t davidalecrim1/rinha-with-go-2025:latest .
