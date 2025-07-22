@@ -128,17 +128,14 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	res, err := a.client.Do(req)
 	slog.Debug("response from api", "url", url, "res", res, "payment", payment)
 
-	if res != nil && res.StatusCode == 422 {
-		return nil
-	}
-
-	if res != nil && (res.StatusCode >= 500 ||
-		res.StatusCode == 429 ||
-		res.StatusCode == 408) {
+	if res != nil && res.StatusCode != 200 {
 		return ErrUnavailableProcessor
 	}
-
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return ErrUnavailableProcessor
+	}
+	if err != nil || res == nil {
+		slog.Info("failed to process the request", "err", err, "res", res)
 		return ErrUnavailableProcessor
 	}
 
@@ -194,7 +191,7 @@ func (a *PaymentProcessorAdapter) EnableHealthCheck(should string) {
 	}
 
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
@@ -227,16 +224,24 @@ func (a *PaymentProcessorAdapter) EnableHealthCheck(should string) {
 }
 
 func (a *PaymentProcessorAdapter) healthCheckEndpoint(url string) (HealthCheckResponse, error) {
-	res, err := a.client.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return HealthCheckResponse{}, err
+	}
+
+	res, err := a.client.Do(req)
 	if res == nil || err != nil || res.StatusCode != 200 {
-		slog.Error("failed to health check", "url", url)
+		slog.Debug("failed to health check", "url", url)
 		return HealthCheckResponse{}, err
 	}
 
 	var respBody HealthCheckResponse
 	decoder := sonic.ConfigFastest.NewDecoder(res.Body)
 	if err := decoder.Decode(&respBody); err != nil {
-		slog.Error("failed to parse the response", "url", url)
+		slog.Debug("failed to parse the response", "url", url)
 		return HealthCheckResponse{}, err
 	}
 
@@ -256,7 +261,7 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 	}()
 
 	go func() {
-		ticker := time.NewTicker(time.Second * 5)
+		ticker := time.NewTicker(time.Second * 1)
 		defer ticker.Stop()
 
 		for range ticker.C {
@@ -288,7 +293,7 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 
 func (a *PaymentProcessorAdapter) retryWorkers() {
 	for payment := range a.retryQueue {
-		time.Sleep(time.Millisecond * 500)
+		time.Sleep(time.Millisecond * 50)
 		a.Process(payment)
 	}
 }

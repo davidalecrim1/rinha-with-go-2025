@@ -65,8 +65,8 @@ func main() {
 	mdb := mdbClient.Database(utils.GetEnvOrSetDefault("MONGO_DATABASE", "payments-db"))
 
 	repo := internal.NewPaymentRepository(mdb)
-	workers := 5000
-	slowQueue := make(chan internal.PaymentRequestProcessor, 5000)
+	workers := 1000
+	slowQueue := make(chan internal.PaymentRequestProcessor, 2000)
 
 	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
 	rdb := redis.NewClient(&redis.Options{
