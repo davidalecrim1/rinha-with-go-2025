@@ -121,3 +121,13 @@
 **Changes**:
 
 - Using the partial results, I see that the precision problem was an actual thing and I needed to fix it. Therefore I ajusted it in the summary.
+
+# v.0.7.0 (Async - MongoDB)
+
+**Commit:** ceb4ababb32a3fa141353b8db000db228b7878aa
+**Load Test Commit Version**: c1fef63d23ee7cab54ebd1fd03cb20565536947c
+**Load Test Result**: N/A
+
+**Changes**:
+
+- I understood better the inconsistency and improve the overall code to execute with less probability of inconsistency.
