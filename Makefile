@@ -8,6 +8,13 @@ load-test:
 	K6_WEB_DASHBOARD_EXPORT="$(EXPORT_FILE)" \
 	k6 run ./rinha-source/rinha-test/rinha.js
 
+super-load-test:
+	K6_WEB_DASHBOARD=true \
+	K6_WEB_DASHBOARD_PORT=5665 \
+	K6_WEB_DASHBOARD_OPEN=true \
+	K6_WEB_DASHBOARD_EXPORT="$(EXPORT_FILE)" \
+	k6 run -e MAX_REQUESTS=850 ./rinha-source/rinha-test/rinha.js
+
 run-one-instance-local:
 	docker compose -f rinha-docker-compose-arm64.yml restart && air . 
 
@@ -18,13 +25,13 @@ run-processor:
 	docker compose -f rinha-docker-compose-arm64.yml up -d
 
 profiling-cpu:
-	go tool pprof -http=:8080 ./docs/profiling/cpu.prof
+	pproftui ./docs/profiling/go-backend-1/cpu.prof
 
 profiling-memory:
-	go tool pprof -http=:8081 ./docs/profiling/memory.prof
+	pproftui ./docs/profiling/go-backend-1/memory.prof
 
 profiling-trace:
-	go tool trace ./docs/profiling/trace.prof
+	pproftui ./docs/profiling/go-backend-1/trace.prof
 
 build-docker:
 	docker build -t davidalecrim1/rinha-with-go-2025:latest .

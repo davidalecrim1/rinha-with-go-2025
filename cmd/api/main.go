@@ -42,7 +42,6 @@ func main() {
 	client := &http.Client{
 		Transport: tr,
 	}
-
 	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
@@ -56,8 +55,8 @@ func main() {
 	repo := internal.NewPaymentRepository(rdb)
 	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
-	workers := 5000
-	slowQueue := make(chan internal.PaymentRequestProcessor, 5000)
+	workers := 1000
+	slowQueue := make(chan internal.PaymentRequestProcessor, 2000)
 
 	adapter := internal.NewPaymentProcessorAdapter(
 		client,
