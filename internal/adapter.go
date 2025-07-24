@@ -75,14 +75,14 @@ func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) 
 	defer a.mu.RUnlock()
 
 	var err error
-	if !a.healthStatus.Default.Failing && a.healthStatus.Default.MinResponseTime < 100 {
+	if !a.healthStatus.Default.Failing && a.healthStatus.Default.MinResponseTime < 80 {
 		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
 			time.Second*10,
 			PaymentEndpointDefault,
 		)
-	} else if !a.healthStatus.Fallback.Failing && a.healthStatus.Fallback.MinResponseTime < 100 {
+	} else if !a.healthStatus.Fallback.Failing && a.healthStatus.Fallback.MinResponseTime < 80 {
 		err = a.sendPayment(
 			payment,
 			a.fallbackUrl+"/payments",

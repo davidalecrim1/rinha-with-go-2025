@@ -57,7 +57,7 @@ services:
           memory: "85MB"
 
   redis:
-    image: redis:7.2-alpine
+    image: redis:8.0-alpine
     container_name: redis-db
     command: redis-server --save "" --appendonly no --maxclients 20000
     networks:
@@ -92,7 +92,7 @@ services:
 
   load-balancer:
     container_name: load-balancer-nginx
-    image: nginx:1.27.1-alpine
+    image: nginx:1.29-alpine
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
