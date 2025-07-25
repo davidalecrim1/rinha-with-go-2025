@@ -27,18 +27,22 @@ func main() {
 	ctx := context.Background()
 
 	tr := &http.Transport{
-		MaxIdleConns:        30,
-		MaxIdleConnsPerHost: 15,
-		IdleConnTimeout:     120 * time.Second,
-		MaxConnsPerHost:     20,
-		DisableCompression:  true,
-		DisableKeepAlives:   false,
-		ForceAttemptHTTP2:   false,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		MaxConnsPerHost:     100,
+
+		IdleConnTimeout:       30 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+
+		DisableCompression: true,
+		DisableKeepAlives:  false,
+		ForceAttemptHTTP2:  false,
 
 		DialContext: (&net.Dialer{
-			Timeout:   1 * time.Second,  // Fast connection establishment
-			KeepAlive: 30 * time.Second, // Keep TCP connections alive
-			DualStack: true,             // Enable IPv4/IPv6
+			Timeout:   100 * time.Millisecond,
+			KeepAlive: 90 * time.Second,
+			DualStack: true,
 		}).DialContext,
 	}
 	client := &http.Client{
@@ -53,7 +57,11 @@ func main() {
 	opts := options.
 		Client().
 		ApplyURI(endpoint).
-		SetServerSelectionTimeout(time.Second * 5)
+		SetServerSelectionTimeout(time.Second * 5).
+		SetMaxConnIdleTime(30 * time.Second).
+		SetMinPoolSize(40).
+		SetMaxPoolSize(100)
+
 	mdbClient, err := mongo.Connect(ctx, opts)
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect to mongodb: %v", err))
@@ -75,7 +83,7 @@ func main() {
 		DB:       0,
 	})
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		panic("failed to connect to redis")
+		panic(fmt.Errorf("failed to connect to redis: %v", err))
 	}
 
 	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")

@@ -36,8 +36,11 @@ func NewPaymentRepository(db *mongo.Database) *PaymentRepository {
 	col := db.Collection(paymentsCollection)
 
 	idx := mongo.IndexModel{
-		Keys:    bson.D{{"requestedAt", 1}}, // ascending index
-		Options: options.Index().SetName("idx_requestedAt"),
+		Keys: bson.D{
+			{"requestedAt", 1},
+			{"processed", 1},
+		},
+		Options: options.Index().SetName("idx_requestedAt_processed"),
 	}
 
 	name, err := col.Indexes().CreateOne(ctx, idx)
@@ -92,53 +95,58 @@ func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, err
 		filterByTime = err1 == nil && err2 == nil
 	}
 
-	var filter bson.M
+	var matchStage bson.M
 	if filterByTime {
-		filter = bson.M{
-			"requestedAt": bson.M{
-				"$gte": from,
-				"$lte": to,
+		matchStage = bson.M{
+			"$match": bson.M{
+				"requestedAt": bson.M{
+					"$gte": from,
+					"$lte": to,
+				},
 			},
 		}
 	} else {
-		filter = bson.M{}
+		matchStage = bson.M{"$match": bson.M{}}
 	}
 
-	opts := options.Find().SetSort(bson.D{{"requestedAt", 1}})
-	cursor, err := r.collection.Find(ctx, filter, opts)
+	groupStage := bson.M{
+		"$group": bson.M{
+			"_id":           "$processed",
+			"totalRequests": bson.M{"$sum": 1},
+			"totalAmount":   bson.M{"$sum": "$amount"},
+		},
+	}
+
+	cursor, err := r.collection.Aggregate(ctx, []bson.M{matchStage, groupStage})
 	if err != nil {
 		return SummaryResponse{}, err
 	}
 	defer cursor.Close(ctx)
 
-	var results []PaymentProcessedDocument
-	if err := cursor.All(ctx, &results); err != nil {
-		return SummaryResponse{}, err
-	}
+	response := SummaryResponse{}
+	for cursor.Next(ctx) {
+		var result struct {
+			ID            string  `bson:"_id"`
+			TotalRequests int     `bson:"totalRequests"`
+			TotalAmount   float64 `bson:"totalAmount"`
+		}
 
-	response := SummaryResponse{
-		DefaultSummary: SummaryTotalRequestsResponse{
-			TotalRequests: 0,
-			TotalAmount:   0.0,
-		},
-		FallbackSummary: SummaryTotalRequestsResponse{
-			TotalRequests: 0,
-			TotalAmount:   0.0,
-		},
-	}
+		if err := cursor.Decode(&result); err != nil {
+			continue
+		}
 
-	for _, payment := range results {
-		if payment.ProcessedBy == PaymentEndpointDefault {
-			response.DefaultSummary.TotalAmount += payment.Amount
-			response.DefaultSummary.TotalRequests++
+		if result.ID == PaymentEndpointDefault {
+			response.DefaultSummary.TotalRequests = result.TotalRequests
+			response.DefaultSummary.TotalAmount = result.TotalAmount
 		} else {
-			response.FallbackSummary.TotalAmount += payment.Amount
-			response.FallbackSummary.TotalRequests++
+			response.FallbackSummary.TotalRequests = result.TotalRequests
+			response.FallbackSummary.TotalAmount = result.TotalAmount
 		}
 	}
 
 	response.DefaultSummary.TotalAmount = math.Round(response.DefaultSummary.TotalAmount*100) / 100
 	response.FallbackSummary.TotalAmount = math.Round(response.FallbackSummary.TotalAmount*100) / 100
+
 	return response, nil
 }
 

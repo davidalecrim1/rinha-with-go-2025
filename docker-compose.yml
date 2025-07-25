@@ -16,21 +16,21 @@ services:
     ports:
       - "9091:80"
     environment:
-    - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-    - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-    - PORT=80
-    - REDIS_ADDR=redis-db:6379
-    - MONITOR_HEALTH=true
-    - ENABLE_PROFILING=false
-    - MONGO_ENDPOINT=mongodb://mongodb:27017
-    - MONGO_DATABASE=payments-db
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PORT=80
+      - REDIS_ADDR=redis-db:6379
+      - MONITOR_HEALTH=true
+      - ENABLE_PROFILING=false
+      - MONGO_ENDPOINT=mongodb://mongodb:27017
+      - MONGO_DATABASE=payments-db
     networks:
       - app
       - payment-processor
     deploy:
       resources:
         limits:
-          cpus: "0.4"
+          cpus: "0.3"
           memory: "85MB"
 
   go-backend-2:
@@ -39,21 +39,21 @@ services:
     ports:
       - "9092:80"
     environment:
-    - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-    - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-    - PORT=80
-    - REDIS_ADDR=redis-db:6379
-    - MONITOR_HEALTH=false
-    - ENABLE_PROFILING=false
-    - MONGO_ENDPOINT=mongodb://mongodb:27017
-    - MONGO_DATABASE=payments-db
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PORT=80
+      - REDIS_ADDR=redis-db:6379
+      - MONITOR_HEALTH=false
+      - ENABLE_PROFILING=false
+      - MONGO_ENDPOINT=mongodb://mongodb:27017
+      - MONGO_DATABASE=payments-db
     networks:
       - app
       - payment-processor
     deploy:
       resources:
         limits:
-          cpus: "0.4"
+          cpus: "0.3"
           memory: "85MB"
 
   redis:
@@ -87,7 +87,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.5"
           memory: "100MB"
 
   load-balancer:
@@ -116,7 +116,7 @@ services:
     image: mongo-express
     ports:
       - "8081:8081"
-    environment: 
+    environment:
       - ME_CONFIG_MONGODB_URL=mongodb://mongodb:27017
     depends_on:
       - mongodb

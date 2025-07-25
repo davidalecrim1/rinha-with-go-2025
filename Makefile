@@ -25,13 +25,13 @@ run-processor:
 	docker compose -f rinha-docker-compose-arm64.yml up -d
 
 profiling-cpu:
-	pproftui ./docs/profiling/go-backend-1/cpu.prof
+	pproftui --module-path="rinha-with-go-2025" ./docs/profiling/go-backend-1/cpu.prof
 
 profiling-memory:
-	pproftui ./docs/profiling/go-backend-1/memory.prof
+	pproftui --module-path="rinha-with-go-2025" ./docs/profiling/go-backend-1/memory.prof
 
 profiling-trace:
-	pproftui ./docs/profiling/go-backend-1/trace.prof
+	go tool trace ./docs/profiling/go-backend-1/trace.prof
 
 build-docker:
 	docker build -t davidalecrim1/rinha-with-go-2025:latest .
