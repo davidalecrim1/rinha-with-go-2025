@@ -22,6 +22,12 @@ var (
 
 var HealthCheckKey = "health-check"
 
+var bufferPool = sync.Pool{
+	New: func() any {
+		return bytes.NewBuffer(make([]byte, 0, 512))
+	},
+}
+
 type PaymentProcessorAdapter struct {
 	client       *http.Client
 	db           *redis.Client
@@ -54,15 +60,15 @@ func NewPaymentProcessorAdapter(
 	}
 
 	a.healthStatus.Store(HealthCheckStatus{
-			Default: HealthCheckResponse{
-				Failing:         false,
-				MinResponseTime: 0,
-			},
-			Fallback: HealthCheckResponse{
-				Failing:         false,
-				MinResponseTime: 0,
-			},
-		})
+		Default: HealthCheckResponse{
+			Failing:         false,
+			MinResponseTime: 0,
+		},
+		Fallback: HealthCheckResponse{
+			Failing:         false,
+			MinResponseTime: 0,
+		},
+	})
 
 	return a
 }
@@ -75,7 +81,7 @@ func (a *PaymentProcessorAdapter) Process(payment PaymentRequestProcessor) {
 }
 
 func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) error {
-		var err error
+	var err error
 	healthStatus := a.healthStatus.Load().(HealthCheckStatus)
 
 	if !healthStatus.Default.Failing && healthStatus.Default.MinResponseTime < 80 {
@@ -105,15 +111,21 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	slog.Debug("sending the request", "body", payment, "url", url)
 
 	payment.UpdateRequestTime()
-	reqBody, err := sonic.ConfigFastest.Marshal(payment)
-	if err != nil {
+
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufferPool.Put(buf)
+
+	encoder := sonic.ConfigFastest.NewEncoder(buf)
+	if err := encoder.Encode(payment); err != nil {
 		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
+	reader := bytes.NewReader(buf.Bytes())
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
 	if err != nil {
 		return err
 	}
@@ -285,7 +297,7 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 				continue
 			}
 
-						a.healthStatus.Store(healthCheckStatus)
+			a.healthStatus.Store(healthCheckStatus)
 		}
 	}()
 }
