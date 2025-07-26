@@ -55,8 +55,8 @@ func main() {
 	repo := internal.NewPaymentRepository(rdb)
 	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
-	workers := 1000
-	slowQueue := make(chan internal.PaymentRequestProcessor, 2000)
+	workers := 1500
+	slowQueue := make(chan internal.PaymentRequestProcessor, 3000)
 
 	adapter := internal.NewPaymentProcessorAdapter(
 		client,
@@ -73,11 +73,16 @@ func main() {
 		JSONEncoder: sonicMarshal,
 		JSONDecoder: sonicUnmarshal,
 
-		Prefork:       false,
-		CaseSensitive: true,
-		StrictRouting: false,
-		ServerHeader:  "Fiber",
-		AppName:       "High Performance API",
+		Prefork:                   false,
+		CaseSensitive:             true,
+		StrictRouting:             false,
+		ServerHeader:              "",   // Remove server header for slight perf gain
+		AppName:                   "",   // Remove app name for slight perf gain
+		DisableDefaultDate:        true, // Disable default date header
+		DisableDefaultContentType: true, // We set content-type manually
+		DisableHeaderNormalizing:  true, // Skip header normalization for speed
+		DisableStartupMessage:     true, // Skip startup message
+		ReduceMemoryUsage:         true, // Enable memory optimizations
 	})
 
 	app.Post("/payments", handler.Process)

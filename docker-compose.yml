@@ -15,19 +15,19 @@ services:
     ports:
       - "9091:80"
     environment:
-    - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-    - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-    - PORT=80
-    - REDIS_ADDR=redis-db:6379
-    - MONITOR_HEALTH=true
-    - ENABLE_PROFILING=false
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PORT=80
+      - REDIS_ADDR=redis-db:6379
+      - MONITOR_HEALTH=true
+      - ENABLE_PROFILING=false
     networks:
       - app
       - payment-processor
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: "0.550"
           memory: "100MB"
 
   go-backend-2:
@@ -36,19 +36,19 @@ services:
     ports:
       - "9092:80"
     environment:
-    - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-    - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-    - PORT=80
-    - REDIS_ADDR=redis-db:6379
-    - MONITOR_HEALTH=false
-    - ENABLE_PROFILING=false
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PORT=80
+      - REDIS_ADDR=redis-db:6379
+      - MONITOR_HEALTH=false
+      - ENABLE_PROFILING=false
     networks:
       - app
       - payment-processor
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: "0.550"
           memory: "100MB"
 
   redis:
@@ -68,7 +68,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.2"
           memory: "100MB"
 
   load-balancer:

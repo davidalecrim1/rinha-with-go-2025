@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -25,8 +26,7 @@ type PaymentProcessorAdapter struct {
 	client       *http.Client
 	db           *redis.Client
 	repo         *PaymentRepository
-	healthStatus *HealthCheckStatus
-	mu           sync.RWMutex
+	healthStatus atomic.Value
 	defaultUrl   string
 	fallbackUrl  string
 	retryQueue   chan PaymentRequestProcessor
@@ -42,11 +42,18 @@ func NewPaymentProcessorAdapter(
 	retryQueue chan PaymentRequestProcessor,
 	workers int,
 ) *PaymentProcessorAdapter {
-	return &PaymentProcessorAdapter{
-		client: client,
-		db:     db,
-		repo:   repo,
-		healthStatus: &HealthCheckStatus{
+	a := &PaymentProcessorAdapter{
+		client:       client,
+		db:           db,
+		repo:         repo,
+		healthStatus: atomic.Value{},
+		defaultUrl:   defaultUrl,
+		fallbackUrl:  fallbackUrl,
+		retryQueue:   retryQueue,
+		workers:      workers,
+	}
+
+	a.healthStatus.Store(HealthCheckStatus{
 			Default: HealthCheckResponse{
 				Failing:         false,
 				MinResponseTime: 0,
@@ -55,12 +62,9 @@ func NewPaymentProcessorAdapter(
 				Failing:         false,
 				MinResponseTime: 0,
 			},
-		},
-		defaultUrl:  defaultUrl,
-		fallbackUrl: fallbackUrl,
-		retryQueue:  retryQueue,
-		workers:     workers,
-	}
+		})
+
+	return a
 }
 
 func (a *PaymentProcessorAdapter) Process(payment PaymentRequestProcessor) {
@@ -71,23 +75,15 @@ func (a *PaymentProcessorAdapter) Process(payment PaymentRequestProcessor) {
 }
 
 func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) error {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
+		var err error
+	healthStatus := a.healthStatus.Load().(HealthCheckStatus)
 
-	var err error
-	if !a.healthStatus.Default.Failing && a.healthStatus.Default.MinResponseTime < 80 {
+	if !healthStatus.Default.Failing && healthStatus.Default.MinResponseTime < 80 {
 		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
 			time.Second*10,
 			PaymentEndpointDefault,
-		)
-	} else if !a.healthStatus.Fallback.Failing && a.healthStatus.Fallback.MinResponseTime < 80 {
-		err = a.sendPayment(
-			payment,
-			a.fallbackUrl+"/payments",
-			time.Second*10,
-			PaymentEndpointFallback,
 		)
 	} else {
 		return ErrUnavailableProcessor
@@ -283,15 +279,13 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 
 			}
 
-			var healthCheckStatus *HealthCheckStatus
+			var healthCheckStatus HealthCheckStatus
 			if err := sonic.ConfigFastest.Unmarshal([]byte(resBody), &healthCheckStatus); err != nil {
 				slog.Debug("failed update the health check", "err", err)
 				continue
 			}
 
-			a.mu.Lock()
-			a.healthStatus = healthCheckStatus
-			a.mu.Unlock()
+						a.healthStatus.Store(healthCheckStatus)
 		}
 	}()
 }
