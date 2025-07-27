@@ -46,8 +46,3 @@ type HealthCheckResponse struct {
 	Failing         bool `json:"failing"`
 	MinResponseTime int  `json:"minResponseTime"`
 }
-
-type HealthCheckStatus struct {
-	Default  HealthCheckResponse `json:"default"`
-	Fallback HealthCheckResponse `json:"fallback"`
-}
