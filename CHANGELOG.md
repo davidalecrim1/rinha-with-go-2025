@@ -133,7 +133,7 @@
 - I understood better the inconsistency and improve the overall code to execute with less probability of inconsistency.
 
 # v.0.8.0 (Async - MongoDB)
-
+****
 **Commit:** e8d9ad379e36ee72d6947af912f62a9f539a8919
 **Load Test Commit Version**: 1fada81c0ea09f5b82a7ae61ffe3444602d3adea
 **Load Test Result**: report_20250725_133931.html
@@ -142,3 +142,13 @@
 
 - I explore more alternatives to improve the inconsistency of this version. But it still happens in this version.
 - This versions seems to be less inconsistency when compared with others before using Mongo.
+
+# v.0.9.0 (Async - MongoDB)
+
+**Commit:** 1d60271c540ca1c6d52438b1291707e1debeead4
+**Load Test Commit Version**: 1fada81c0ea09f5b82a7ae61ffe3444602d3adea
+**Load Test Result**: report_20250728_064633.html
+
+**Changes**:
+- Improved the health check to avoid inconsistencies.
+- Still have inconsistencies sometimes. I will need to dive deep in this.
