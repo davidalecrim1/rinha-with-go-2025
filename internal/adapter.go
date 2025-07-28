@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -20,23 +19,22 @@ var (
 	ErrUnavailableProcessor = errors.New("unavailable processor")
 )
 
-var HealthCheckKey = "health-check"
-
-var bufferPool = sync.Pool{
-	New: func() any {
-		return bytes.NewBuffer(make([]byte, 0, 512))
-	},
-}
+const (
+	HealthCheckKeyDefault  = "health-check:default"
+	HealthCheckKeyFallback = "health-check:fallback"
+	HealthCheckTicker      = 1 * time.Second
+)
 
 type PaymentProcessorAdapter struct {
-	client       *http.Client
-	db           *redis.Client
-	repo         *PaymentRepository
-	healthStatus atomic.Value
-	defaultUrl   string
-	fallbackUrl  string
-	retryQueue   chan PaymentRequestProcessor
-	workers      int
+	client               *http.Client
+	db                   *redis.Client
+	repo                 *PaymentRepository
+	healthStatusDefault  atomic.Value
+	healthStatusFallback atomic.Value
+	defaultUrl           string
+	fallbackUrl          string
+	retryQueue           chan PaymentRequestProcessor
+	workers              int
 }
 
 func NewPaymentProcessorAdapter(
@@ -49,25 +47,22 @@ func NewPaymentProcessorAdapter(
 	workers int,
 ) *PaymentProcessorAdapter {
 	a := &PaymentProcessorAdapter{
-		client:       client,
-		db:           db,
-		repo:         repo,
-		healthStatus: atomic.Value{},
-		defaultUrl:   defaultUrl,
-		fallbackUrl:  fallbackUrl,
-		retryQueue:   retryQueue,
-		workers:      workers,
+		client:      client,
+		db:          db,
+		repo:        repo,
+		defaultUrl:  defaultUrl,
+		fallbackUrl: fallbackUrl,
+		retryQueue:  retryQueue,
+		workers:     workers,
 	}
 
-	a.healthStatus.Store(HealthCheckStatus{
-		Default: HealthCheckResponse{
-			Failing:         false,
-			MinResponseTime: 0,
-		},
-		Fallback: HealthCheckResponse{
-			Failing:         false,
-			MinResponseTime: 0,
-		},
+	a.healthStatusDefault.Store(HealthCheckResponse{
+		Failing:         false,
+		MinResponseTime: 0,
+	})
+	a.healthStatusFallback.Store(HealthCheckResponse{
+		Failing:         false,
+		MinResponseTime: 0,
 	})
 
 	return a
@@ -81,10 +76,10 @@ func (a *PaymentProcessorAdapter) Process(payment PaymentRequestProcessor) {
 }
 
 func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) error {
-	var err error
-	healthStatus := a.healthStatus.Load().(HealthCheckStatus)
+	healthStatusDefault := a.healthStatusDefault.Load().(HealthCheckResponse)
 
-	if !healthStatus.Default.Failing && healthStatus.Default.MinResponseTime < 80 {
+	var err error
+	if !healthStatusDefault.Failing && healthStatusDefault.MinResponseTime < 80 {
 		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
@@ -109,23 +104,19 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	endpoint PaymentEndpoint,
 ) error {
 	slog.Debug("sending the request", "body", payment, "url", url)
+	start1 := time.Now()
 
 	payment.UpdateRequestTime()
 
-	buf := bufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer bufferPool.Put(buf)
-
-	encoder := sonic.ConfigFastest.NewEncoder(buf)
-	if err := encoder.Encode(payment); err != nil {
+	rawBody, err := sonic.Marshal(payment)
+	if err != nil {
 		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	reader := bytes.NewReader(buf.Bytes())
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(rawBody))
 	if err != nil {
 		return err
 	}
@@ -147,11 +138,23 @@ func (a *PaymentProcessorAdapter) sendPayment(
 		return ErrUnavailableProcessor
 	}
 
+	start2 := time.Now()
 	err = a.repo.Add(PaymentProcessed{
-		payment,
-		endpoint,
+		PaymentRequestProcessor: payment,
+		Processed:               endpoint,
 	})
 
+	if time.Since(start1).Milliseconds() > 25 {
+		slog.Debug("time of the complete request and db",
+			"dbTimeMs", time.Since(start2).Milliseconds(),
+			"requestTimeMs", time.Since(start1).Milliseconds(),
+			"healthStatusDefault", a.healthStatusDefault.Load().(HealthCheckResponse),
+			"healthStatusFallback", a.healthStatusFallback.Load().(HealthCheckResponse),
+			"endpoint", endpoint,
+			"err", err,
+			"requestAt", *payment.RequestedAt,
+		)
+	}
 	return err
 }
 
@@ -204,39 +207,54 @@ func (a *PaymentProcessorAdapter) EnableHealthCheck(should string) {
 	}
 
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(HealthCheckTicker)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			resDefault, err := a.healthCheckEndpoint(a.defaultUrl + "/payments/service-health")
-			if err != nil {
-				continue
+			if err := a.storeHealthStatus(a.defaultUrl+"/payments/service-health", HealthCheckKeyDefault); err != nil {
+				slog.Debug("failed to update the health check", "err", err)
 			}
-			resFallback, err := a.healthCheckEndpoint(a.fallbackUrl + "/payments/service-health")
-			if err != nil {
-				continue
-			}
+		}
+	}()
 
-			reqbody := HealthCheckStatus{
-				resDefault,
-				resFallback,
-			}
-			rawBody, err := sonic.Marshal(reqbody)
-			if err != nil {
-				slog.Debug("failed to encode the json object for redis", "err", err)
-				continue
-			}
-			if a.db.Set(context.Background(), HealthCheckKey, rawBody, 0).Err() != nil {
-				slog.Debug("failed to save health check in redis")
-				continue
-			}
+	go func() {
+		ticker := time.NewTicker(HealthCheckTicker)
+		defer ticker.Stop()
 
-			slog.Debug("updating the", "healthCheckStatus", reqbody)
+		for range ticker.C {
+			if err := a.storeHealthStatus(a.fallbackUrl+"/payments/service-health", HealthCheckKeyFallback); err != nil {
+				slog.Debug("failed to update the health check", "err", err)
+			}
 		}
 	}()
 }
 
-func (a *PaymentProcessorAdapter) healthCheckEndpoint(url string) (HealthCheckResponse, error) {
+func (a *PaymentProcessorAdapter) storeHealthStatus(url string, key string) error {
+	resDefault, err := a.retrieveHealth(url)
+	if err != nil {
+		return err
+	}
+
+	reqbody := HealthCheckResponse{
+		Failing:         resDefault.Failing,
+		MinResponseTime: resDefault.MinResponseTime,
+	}
+	rawBody, err := sonic.Marshal(reqbody)
+	if err != nil {
+		slog.Debug("failed to encode the json object for redis", "err", err)
+		return err
+	}
+
+	if err := a.db.Set(context.Background(), key, rawBody, 0).Err(); err != nil {
+		slog.Debug("failed to save health check in redis", "err", err)
+		return err
+	}
+
+	slog.Debug("updating the health check", "healthCheckStatus", reqbody, "key", key)
+	return nil
+}
+
+func (a *PaymentProcessorAdapter) retrieveHealth(url string) (HealthCheckResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 	defer cancel()
 
@@ -274,37 +292,54 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 	}()
 
 	go func() {
-		ticker := time.NewTicker(time.Second * 1)
+		ticker := time.NewTicker(HealthCheckTicker)
 		defer ticker.Stop()
 
 		for range ticker.C {
-			res := a.db.Get(context.Background(), HealthCheckKey)
-			if res.Err() != nil {
-				slog.Debug("failed update the health check", "err", res.Err())
-				continue
-			}
-
-			resBody, err := res.Result()
-			if err != nil {
-				slog.Debug("failed update the health check", "err", res.Err())
-				continue
-
-			}
-
-			var healthCheckStatus HealthCheckStatus
-			if err := sonic.ConfigFastest.Unmarshal([]byte(resBody), &healthCheckStatus); err != nil {
+			if err := a.syncHealthStatus(HealthCheckKeyDefault); err != nil {
 				slog.Debug("failed update the health check", "err", err)
-				continue
 			}
+		}
+	}()
 
-			a.healthStatus.Store(healthCheckStatus)
+	go func() {
+		ticker := time.NewTicker(HealthCheckTicker)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if err := a.syncHealthStatus(HealthCheckKeyFallback); err != nil {
+				slog.Debug("failed update the health check", "err", err)
+			}
 		}
 	}()
 }
 
+func (a *PaymentProcessorAdapter) syncHealthStatus(key string) error {
+	resBody, err := a.db.Get(context.Background(), key).Result()
+	if err != nil {
+		slog.Debug("failed to get the health check", "err", err)
+		return err
+	}
+
+	var healthCheckStatus HealthCheckResponse
+	if err := sonic.ConfigFastest.Unmarshal([]byte(resBody), &healthCheckStatus); err != nil {
+		slog.Debug("failed to unmarshal the health check from redis", "err", err)
+		return err
+	}
+
+	switch key {
+	case HealthCheckKeyDefault:
+		a.healthStatusDefault.Store(healthCheckStatus)
+	case HealthCheckKeyFallback:
+		a.healthStatusFallback.Store(healthCheckStatus)
+	}
+
+	return nil
+}
+
 func (a *PaymentProcessorAdapter) retryWorkers() {
 	for payment := range a.retryQueue {
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(time.Millisecond * 10) // wait before retry
 		a.Process(payment)
 	}
 }

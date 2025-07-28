@@ -47,11 +47,6 @@ type HealthCheckResponse struct {
 	MinResponseTime int  `json:"minResponseTime"`
 }
 
-type HealthCheckStatus struct {
-	Default  HealthCheckResponse `json:"default"`
-	Fallback HealthCheckResponse `json:"fallback"`
-}
-
 type PaymentProcessed struct {
 	PaymentRequestProcessor
 	Processed PaymentEndpoint `json:"processed"`
