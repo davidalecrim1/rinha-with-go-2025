@@ -286,8 +286,8 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 
 	go func() {
 		for {
-			slog.Debug("Status of queue", "lenRetryQueue", len(a.retryQueue))
-			time.Sleep(3 * time.Second)
+			slog.Info("Status of queue", "lenRetryQueue", len(a.retryQueue))
+			time.Sleep(1 * time.Second)
 		}
 	}()
 

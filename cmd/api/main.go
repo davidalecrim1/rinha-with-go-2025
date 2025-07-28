@@ -55,8 +55,8 @@ func main() {
 	repo := internal.NewPaymentRepository(rdb)
 	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
-	workers := 300
-	slowQueue := make(chan internal.PaymentRequestProcessor, 3000)
+	workers := 350
+	slowQueue := make(chan internal.PaymentRequestProcessor, 6000)
 
 	adapter := internal.NewPaymentProcessorAdapter(
 		client,
