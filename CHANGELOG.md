@@ -124,8 +124,19 @@
 
 **Commit:** 08e8098eb66023e6f429398929b4964034dd9ad6
 **Load Test Commit Version**: 0432b269b01645443990d708b9ac60d43f87b354
-**Load Test Result**: report_20250723_214015.htmlq
+**Load Test Result**: report_20250723_214015.html
 
 **Changes**:
 - Fine tuned the parameters to have better results with lower fees and zero inconsistency. In this version sometimes the fees are lower given the miliseconds configuration.
 - Also updates the container images to newer versions.
+- Change the mutex to atomic.Value
+
+# v.0.9.0 (Async - Redis Only Default)
+
+**Commit:** 7f29edadf4fb03800407655660ccff7dd3fc40eb
+**Load Test Commit Version**: 1fada81c0ea09f5b82a7ae61ffe3444602d3adea
+**Load Test Result**: report_20250728_070358.html
+
+**Changes**:
+- Improved the health check to avoid inconsistencies.
+- Still have inconsistencies sometimes. I will need to dive deep in this.
