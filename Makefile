@@ -42,7 +42,7 @@ push-image:
 build-for-amd64:
 	docker buildx build \
 	--platform linux/amd64 \
-	-t davidalecrim1/rinha-with-go-2025:v0.7-mongodb \
+	-t davidalecrim1/rinha-with-go-2025:v0.9-mongodb \
 	--push \
 	.
 
