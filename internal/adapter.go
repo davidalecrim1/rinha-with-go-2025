@@ -146,7 +146,11 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	}
 
 	start2 := time.Now()
-	err = a.repo.Add(payment)
+	err = a.repo.Add(PaymentProcessed{
+		PaymentRequestProcessor: payment,
+		Processed:               endpoint,
+	})
+
 	if time.Since(start1).Milliseconds() > 25 {
 		slog.Debug("time of the complete request and db",
 			"dbTimeMs", time.Since(start2).Milliseconds(),
