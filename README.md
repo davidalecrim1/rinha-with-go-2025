@@ -8,7 +8,3 @@ You must develop a backend that receives payment requests and forwards them to t
 
 The Payment Processor source code is available at:  
 https://github.com/zanfranceschi/rinha-de-backend-2025-payment-processor
-
-
-## System Design
-![](./docs/system-design.excalidraw.png)
