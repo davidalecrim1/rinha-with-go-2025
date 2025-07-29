@@ -134,10 +134,11 @@
 # v.0.9.0 (Async - Redis Only Default)
 
 **Commit:** dbd55da437ea61f6b62fae0c4cfb7b5f5c2ca2a2
-**Load Test Commit Version**: 77ff2e8ab64d30c82966dab3dec6a684924123d9
-**Load Test Result**: report_20250728_074753.html
+**Load Test Commit Version**: f5d0948ea01b088bd27f594236e2b925efebff53
+**Load Test Result**: report_20250728_214550.html
 
 **Changes**:
 - Improved the health check to avoid inconsistencies.
 - Still have inconsistencies sometimes. I will need to dive deep in this.
 - Fine tune the queue and workers for this version.
+- The latency is pretty low in this version (p99 of 3 ms).
