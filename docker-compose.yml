@@ -27,7 +27,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.250"
+          cpus: "0.3"
           memory: "50MB"
 
   go-backend-2:
@@ -48,7 +48,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.250"
+          cpus: "0.3"
           memory: "50MB"
 
   go-worker-1:
@@ -72,7 +72,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.6"
+          cpus: "0.5"
           memory: "100MB"
 
   redis:
