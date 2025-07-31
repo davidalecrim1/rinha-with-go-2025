@@ -28,7 +28,7 @@ func NewPaymentRepository(db *redis.Client) *PaymentRepository {
 }
 
 func (r *PaymentRepository) Add(payment PaymentProcessed) error {
-	raw, err := sonic.Marshal(payment)
+	raw, err := sonic.ConfigFastest.Marshal(payment)
 	if err != nil {
 		slog.Error("failed to marshal payment", "err", err)
 		return err

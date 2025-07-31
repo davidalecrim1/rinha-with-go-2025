@@ -2,7 +2,7 @@ x-service-templates:
   go-backend: &go-backend
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.api
     networks:
       - payment-processor
     depends_on:
@@ -27,8 +27,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.550"
-          memory: "100MB"
+          cpus: "0.250"
+          memory: "50MB"
 
   go-backend-2:
     <<: *go-backend
@@ -48,7 +48,31 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.550"
+          cpus: "0.250"
+          memory: "50MB"
+
+  go-worker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: go-worker-1
+    networks:
+      - payment-processor
+    depends_on:
+      - redis
+      - go-backend-1
+      - go-backend-2
+    environment:
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - REDIS_ADDR=redis-db:6379
+      - MONITOR_HEALTH=true
+      - ENABLE_PROFILING=false
+      - WORKERS=10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.6"
           memory: "100MB"
 
   redis:

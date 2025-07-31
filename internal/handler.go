@@ -1,35 +1,32 @@
 package internal
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 type PaymentHandler struct {
-	a *PaymentProcessorAdapter
+	adapter *PaymentAdapter
 }
 
-func NewPaymentHandler(a *PaymentProcessorAdapter) *PaymentHandler {
+func NewPaymentHandler(adapter *PaymentAdapter) *PaymentHandler {
 	return &PaymentHandler{
-		a: a,
+		adapter: adapter,
 	}
+}
+
+func (h *PaymentHandler) RegisterRoutes(app *fiber.App) {
+	app.Post("/payments", h.Process)
+	app.Get("/payments-summary", h.Summary)
+	app.Post("/purge-payments", h.Purge)
 }
 
 func (h *PaymentHandler) Process(c *fiber.Ctx) error {
-	var req PaymentRequest
-	if err := c.BodyParser(&req); err != nil {
-		slog.Error("failed to parse the request body", "error", err)
-		return c.SendStatus(http.StatusBadRequest)
-	}
-
-	payment := PaymentRequestProcessor{
-		req,
-		nil,
-	}
-
-	go h.a.Process(payment)
+	body := c.Body()
+	go func() {
+		h.adapter.Process(body)
+	}()
 	return c.SendStatus(http.StatusAccepted)
 }
 
@@ -37,7 +34,7 @@ func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 
-	summary, err := h.a.Summary(fromStr, toStr)
+	summary, err := h.adapter.Summary(fromStr, toStr)
 	if err != nil {
 		return c.SendStatus(http.StatusInternalServerError)
 	}
@@ -52,7 +49,7 @@ func (h *PaymentHandler) Purge(c *fiber.Ctx) error {
 		tokenStr = "123"
 	}
 
-	if err := h.a.Purge(tokenStr); err != nil {
+	if err := h.adapter.Purge(tokenStr); err != nil {
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 

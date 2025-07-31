@@ -6,7 +6,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o main ./cmd/api/main.go 
+RUN CGO_ENABLED=0 go build --trimpath -ldflags="-s -w" -o main ./cmd/api/main.go 
 
 FROM alpine:3.20
 WORKDIR /app

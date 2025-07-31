@@ -142,3 +142,11 @@
 - Still have inconsistencies sometimes. I will need to dive deep in this.
 - Fine tune the queue and workers for this version.
 - The latency is pretty low in this version (p99 of 3 ms).
+
+# v.1.0.0
+
+**Commit:**
+**Load Test Commit Version**:
+**Load Test Result**:
+
+**Changes**:
