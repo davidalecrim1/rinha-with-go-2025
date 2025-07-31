@@ -23,7 +23,7 @@ func (h *PaymentHandler) RegisterRoutes(app *fiber.App) {
 }
 
 func (h *PaymentHandler) Process(c *fiber.Ctx) error {
-	body := c.Body()
+	body := c.BodyRaw()
 	go func() {
 		h.adapter.Process(body)
 	}()

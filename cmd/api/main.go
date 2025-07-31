@@ -66,7 +66,6 @@ func main() {
 		DisableDefaultContentType: true,
 		DisableHeaderNormalizing:  true,
 		DisableStartupMessage:     true,
-		ReduceMemoryUsage:         true,
 	})
 
 	handler.RegisterRoutes(app)
