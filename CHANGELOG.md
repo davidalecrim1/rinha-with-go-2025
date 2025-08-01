@@ -145,8 +145,11 @@
 
 # v.1.0.0
 
-**Commit:**
-**Load Test Commit Version**:
-**Load Test Result**:
+**Commit:** b2e6fab6224298e7f604c00982ee86ad4b43c90d
+**Load Test Commit Version**: f5d0948ea01b088bd27f594236e2b925efebff53
+**Load Test Result**: report_20250801_072143.html
 
 **Changes**:
+- Changed the Nginx to a custom made proxy called Extreme using FastHTTP.
+- Decoupled the worker from the API to have a better control over the CPU and memory.
+- Fixed a bug of 422 requests being put back in the queue.
