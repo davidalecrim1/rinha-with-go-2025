@@ -66,7 +66,7 @@ services:
       - REDIS_ADDR=redis-db:6379
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
-      - WORKERS=15
+      - WORKERS=50
     deploy:
       resources:
         limits:
@@ -95,7 +95,7 @@ services:
 
   load-balancer:
     container_name: load-balancer-extreme-proxy
-    image: davidalecrim1/extreme-proxy:v0.1.0
+    image: davidalecrim1/extreme-proxy:v0.3.0
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     depends_on:
