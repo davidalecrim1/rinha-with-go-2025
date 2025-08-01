@@ -19,7 +19,6 @@ services:
       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - PORT=80
       - REDIS_ADDR=redis-db:6379
-      - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
     networks:
       - app
@@ -40,7 +39,6 @@ services:
       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - PORT=80
       - REDIS_ADDR=redis-db:6379
-      - MONITOR_HEALTH=false
       - ENABLE_PROFILING=false
     networks:
       - app
@@ -68,7 +66,7 @@ services:
       - REDIS_ADDR=redis-db:6379
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
-      - WORKERS=10
+      - WORKERS=20
     deploy:
       resources:
         limits:

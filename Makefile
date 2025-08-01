@@ -42,6 +42,12 @@ push-image:
 build-for-amd64:
 	docker buildx build \
 	--platform linux/amd64 \
-	-t davidalecrim1/rinha-with-go-2025:v0.9-redis-only-default \
+	-t davidalecrim1/rinha-with-go-2025:v1.0.0-redis-extreme-api \
 	--push \
-	.
+	-f Dockerfile.api .
+
+	docker buildx build \
+	--platform linux/amd64 \
+	-t davidalecrim1/rinha-with-go-2025:v1.0.0-redis-extreme-worker \
+	--push \
+	-f Dockerfile.worker .
