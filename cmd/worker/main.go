@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
 	"os/signal"
 	"strconv"
 	"syscall"
@@ -16,6 +14,7 @@ import (
 	"rinha-with-go-2025/pkg/utils"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/valyala/fasthttp"
 )
 
 func main() {
@@ -29,24 +28,17 @@ func main() {
 
 	slog.SetLogLoggerLevel(slog.LevelInfo)
 
-	tr := &http.Transport{
-		MaxIdleConns:        200,
-		MaxIdleConnsPerHost: 200,
-		IdleConnTimeout:     60 * time.Second,
-		MaxConnsPerHost:     200,
-		DisableCompression:  true,
-		DisableKeepAlives:   false,
-		ForceAttemptHTTP2:   false,
+	defaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "localhost:8001")
+	_ = utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "localhost:8002")
 
-		DialContext: (&net.Dialer{
-			Timeout:   1 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-	}
-
-	httpClient := &http.Client{
-		Transport: tr,
+	httpClient := &fasthttp.HostClient{
+		Addr:                          defaultUrl,
+		MaxConns:                      200,
+		ReadTimeout:                   10 * time.Second,
+		WriteTimeout:                  10 * time.Second,
+		MaxIdleConnDuration:           60 * time.Second,
+		DisableHeaderNamesNormalizing: true,
+		NoDefaultUserAgentHeader:      true,
 	}
 
 	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
@@ -60,9 +52,6 @@ func main() {
 	}
 
 	repo := internal.NewPaymentRepository(redisClient)
-	defaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
-	fallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
-
 	workers := utils.GetEnvOrSetDefault("WORKERS", "5")
 	workersInt, _ := strconv.Atoi(workers)
 
@@ -70,8 +59,6 @@ func main() {
 		redisClient,
 		httpClient,
 		repo,
-		defaultUrl,
-		fallbackUrl,
 		workersInt,
 	)
 

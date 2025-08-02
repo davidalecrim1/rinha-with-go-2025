@@ -15,8 +15,8 @@ services:
     ports:
       - "9091:80"
     environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
       - PORT=80
       - REDIS_ADDR=redis-db:6379
       - ENABLE_PROFILING=false
@@ -35,8 +35,8 @@ services:
     ports:
       - "9092:80"
     environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
       - PORT=80
       - REDIS_ADDR=redis-db:6379
       - ENABLE_PROFILING=false
@@ -61,8 +61,8 @@ services:
       - go-backend-1
       - go-backend-2
     environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
       - REDIS_ADDR=redis-db:6379
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
@@ -95,7 +95,7 @@ services:
 
   load-balancer:
     container_name: load-balancer-extreme-proxy
-    image: davidalecrim1/extreme-proxy:v0.3.0
+    image: davidalecrim1/extreme-proxy:v0.4.0
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     depends_on:

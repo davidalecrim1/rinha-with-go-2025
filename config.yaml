@@ -27,5 +27,5 @@ connection_pool:
 
 # Logging configuration
 logging:
-  enabled: false
+  enabled: true
   level: "error"  # debug, info, warn, error 
