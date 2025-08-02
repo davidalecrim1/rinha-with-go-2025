@@ -153,3 +153,15 @@
 - Changed the Nginx to a custom made proxy called Extreme using FastHTTP.
 - Decoupled the worker from the API to have a better control over the CPU and memory.
 - Fixed a bug of 422 requests being put back in the queue.
+
+
+# v1.1.0
+
+**Commit:** 4aab0e197bfb17a5ad87b166b65fb2c2acacd96d
+**Load Test Commit Version**: f5d0948ea01b088bd27f594236e2b925efebff53
+**Load Test Result**: report_20250801_221041.html
+
+**Changes**:
+- Added more workers for avoid unprocessed payments.
+- Changed the HTTP request to use FastHTTP library.
+- The lantecy increase even if I didn't change a thing on the API.
