@@ -66,7 +66,7 @@ services:
       - REDIS_ADDR=redis-db:6379
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
-      - WORKERS=50
+      - WORKERS=5
     deploy:
       resources:
         limits:
