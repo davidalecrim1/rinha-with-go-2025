@@ -140,3 +140,14 @@
 **Changes**:
 - Improved the health check to avoid inconsistencies.
 - Still have inconsistencies sometimes. I will need to dive deep in this.
+
+
+# v.0.11.0 (Async - Redis)
+
+**Commit:** 14c1df91076e438b244cc8246e311db141a6acdf
+**Load Test Commit Version**: f7f34a4affe0967b549937fab34ed0bd7483608e
+**Load Test Result**: report_20250803_164337.html
+
+**Changes**:
+- Fix retry logic to avoid 422 reprocessing.
+- Fine tune workers and queue to work faster.
