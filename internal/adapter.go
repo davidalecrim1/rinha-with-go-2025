@@ -20,9 +20,10 @@ var (
 )
 
 const (
-	HealthCheckKeyDefault  = "health-check:default"
-	HealthCheckKeyFallback = "health-check:fallback"
-	HealthCheckTicker      = 1 * time.Second
+	HealthCheckKeyDefault     = "health-check:default"
+	HealthCheckKeyFallback    = "health-check:fallback"
+	HealthCheckTicker         = 1 * time.Second
+	MinAcceptableResponseTime = 200 // in milliseconds
 )
 
 type PaymentProcessorAdapter struct {
@@ -77,22 +78,14 @@ func (a *PaymentProcessorAdapter) Process(payment PaymentRequestProcessor) {
 
 func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) error {
 	healthStatusDefault := a.healthStatusDefault.Load().(HealthCheckResponse)
-	healthStatusFallback := a.healthStatusFallback.Load().(HealthCheckResponse)
 
 	var err error
-	if !healthStatusDefault.Failing && healthStatusDefault.MinResponseTime < 80 {
+	if !healthStatusDefault.Failing && healthStatusDefault.MinResponseTime < MinAcceptableResponseTime {
 		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
 			time.Second*10,
 			PaymentEndpointDefault,
-		)
-	} else if !healthStatusFallback.Failing && healthStatusFallback.MinResponseTime < 80 {
-		err = a.sendPayment(
-			payment,
-			a.fallbackUrl+"/payments",
-			time.Second*10,
-			PaymentEndpointFallback,
 		)
 	} else {
 		return ErrUnavailableProcessor
@@ -111,37 +104,47 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	timeout time.Duration,
 	endpoint PaymentEndpoint,
 ) error {
-	slog.Debug("sending the request", "body", payment, "url", url)
 	start1 := time.Now()
-
 	payment.UpdateRequestTime()
-	reqBody, err := sonic.ConfigFastest.Marshal(payment)
+	raw, err := sonic.ConfigFastest.Marshal(payment)
 	if err != nil {
+		slog.Error("failed to marshal the payment", "err", err)
 		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
+		slog.Error("failed to create the request", "err", err)
 		return err
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connection", "keep-alive")
 
 	res, err := a.client.Do(req)
-	slog.Debug("response from api", "url", url, "res", res, "payment", payment)
-
-	if res != nil && res.StatusCode != 200 {
+	slog.Debug("response from the processor", "res", res, "err", err)
+	if res != nil {
+		defer res.Body.Close()
+	}
+	if res != nil && res.StatusCode == 422 {
+		return nil
+	}
+	if res != nil && res.StatusCode == 500 {
 		return ErrUnavailableProcessor
 	}
+
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return ErrUnavailableProcessor
 	}
+
+	if res != nil && res.StatusCode != 200 {
+		slog.Error("failed to process the request", "err", err, "res", res)
+		return ErrUnavailableProcessor
+	}
 	if err != nil || res == nil {
-		slog.Info("failed to process the request", "err", err, "res", res)
+		slog.Error("failed to process the request", "err", err, "res", res)
 		return ErrUnavailableProcessor
 	}
 
@@ -151,7 +154,7 @@ func (a *PaymentProcessorAdapter) sendPayment(
 		Processed:               endpoint,
 	})
 
-	if time.Since(start1).Milliseconds() > 25 {
+	if time.Since(start1).Milliseconds() > 80 {
 		slog.Debug("time of the complete request and db",
 			"dbTimeMs", time.Since(start2).Milliseconds(),
 			"requestTimeMs", time.Since(start1).Milliseconds(),
@@ -164,7 +167,6 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	}
 	return err
 }
-
 func (a *PaymentProcessorAdapter) Summary(from, to string) (SummaryResponse, error) {
 	return a.repo.Summary(from, to)
 }
