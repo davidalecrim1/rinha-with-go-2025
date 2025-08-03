@@ -66,7 +66,7 @@ services:
       - REDIS_ADDR=redis-db:6379
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
-      - WORKERS=5
+      - WORKERS=2
     deploy:
       resources:
         limits:
@@ -80,11 +80,6 @@ services:
     networks:
       - app
       - payment-processor
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     ports:
       - "6379:6379"
     deploy:
