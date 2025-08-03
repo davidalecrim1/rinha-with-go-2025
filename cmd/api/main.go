@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime/pprof"
 	"runtime/trace"
+	"strconv"
 	"time"
 
 	"rinha-with-go-2025/internal"
@@ -55,8 +56,20 @@ func main() {
 	repo := internal.NewPaymentRepository(rdb)
 	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
-	workers := 300
-	slowQueue := make(chan internal.PaymentRequestProcessor, 3000)
+
+	workers := utils.GetEnvOrSetDefault("WORKERS", "20")
+	workersInt, err := strconv.Atoi(workers)
+	if err != nil {
+		panic(fmt.Errorf("failed to convert workers to int: %v", err))
+	}
+
+	retryQueueSize := utils.GetEnvOrSetDefault("RETRY_QUEUE_SIZE", "6000")
+	retryQueueSizeInt, err := strconv.Atoi(retryQueueSize)
+	if err != nil {
+		panic(fmt.Errorf("failed to convert retry queue size to int: %v", err))
+	}
+
+	retryQueue := make(chan internal.PaymentRequestProcessor, retryQueueSizeInt)
 
 	adapter := internal.NewPaymentProcessorAdapter(
 		client,
@@ -64,8 +77,8 @@ func main() {
 		repo,
 		adapterDefaultUrl,
 		adapterFallbackUrl,
-		slowQueue,
-		workers,
+		retryQueue,
+		workersInt,
 	)
 
 	handler := internal.NewPaymentHandler(adapter)
@@ -93,7 +106,7 @@ func main() {
 	adapter.StartWorkers()
 
 	port := utils.GetEnvOrSetDefault("PORT", "9999")
-	err := app.Listen(":" + port)
+	err = app.Listen(":" + port)
 	if err != nil {
 		panic(fmt.Errorf("failed to listen to port: %v", err))
 	}
