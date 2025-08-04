@@ -27,11 +27,17 @@ run-processor:
 profiling-cpu:
 	pproftui ./docs/profiling/go-backend-1/cpu.prof
 
+pprof-cpu:
+	go tool pprof --trim_path=/app/ --source_path=$(pwd) ./docs/profiling/go-backend-1/cpu.prof
+
 profiling-memory:
 	pproftui ./docs/profiling/go-backend-1/memory.prof
 
-profiling-trace:
-	pproftui ./docs/profiling/go-backend-1/trace.prof
+pprof-memory:
+	go tool pprof --trim_path=/app/ --source_path=$(pwd) ./docs/profiling/go-backend-1/memory.prof
+
+pprof-trace:
+	go tool trace ./docs/profiling/go-backend-1/trace.prof
 
 build-docker:
 	docker build -t davidalecrim1/rinha-with-go-2025:latest .
