@@ -16,13 +16,46 @@ import (
 	"rinha-with-go-2025/pkg/utils"
 
 	"github.com/bytedance/sonic"
+	"github.com/gofiber/contrib/otelfiber/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
-	// TODO: Remove this after development.
 	slog.SetLogLoggerLevel(slog.LevelInfo)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	shutdown, tp, err := internal.NewTracer(ctx, os.Getenv("OTEL_SERVICE_NAME"))
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize tracer: %v", err))
+	}
+	defer shutdown(ctx)
+
+	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: "",
+		DB:       0,
+	})
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		panic(fmt.Errorf("failed to connect to redis: %v", err))
+	}
+	repo := internal.NewPaymentRepository(tp.Tracer(), redisClient)
+
+	workers := utils.GetEnvOrSetDefault("WORKERS", "20")
+	workersInt, err := strconv.Atoi(workers)
+	if err != nil {
+		panic(fmt.Errorf("failed to convert workers to int: %v", err))
+	}
+	retryQueueSize := utils.GetEnvOrSetDefault("RETRY_QUEUE_SIZE", "6000")
+	retryQueueSizeInt, err := strconv.Atoi(retryQueueSize)
+	if err != nil {
+		panic(fmt.Errorf("failed to convert retry queue size to int: %v", err))
+	}
+	retryQueue := make(chan internal.PaymentRequestProcessor, retryQueueSizeInt)
 
 	tr := &http.Transport{
 		MaxIdleConns:        30,
@@ -34,46 +67,21 @@ func main() {
 		ForceAttemptHTTP2:   false,
 
 		DialContext: (&net.Dialer{
-			Timeout:   1 * time.Second,  // Fast connection establishment
-			KeepAlive: 30 * time.Second, // Keep TCP connections alive
-			DualStack: true,             // Enable IPv4/IPv6
+			Timeout:   1 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
 		}).DialContext,
 	}
-
-	client := &http.Client{
-		Transport: tr,
-	}
-	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     redisAddr,
-		Password: "",
-		DB:       0,
-	})
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		panic("failed to connect to redis")
+	httpClient := &http.Client{
+		Transport: otelhttp.NewTransport(tr),
 	}
 
-	repo := internal.NewPaymentRepository(rdb)
 	adapterDefaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
 	adapterFallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
-
-	workers := utils.GetEnvOrSetDefault("WORKERS", "20")
-	workersInt, err := strconv.Atoi(workers)
-	if err != nil {
-		panic(fmt.Errorf("failed to convert workers to int: %v", err))
-	}
-
-	retryQueueSize := utils.GetEnvOrSetDefault("RETRY_QUEUE_SIZE", "6000")
-	retryQueueSizeInt, err := strconv.Atoi(retryQueueSize)
-	if err != nil {
-		panic(fmt.Errorf("failed to convert retry queue size to int: %v", err))
-	}
-
-	retryQueue := make(chan internal.PaymentRequestProcessor, retryQueueSizeInt)
-
 	adapter := internal.NewPaymentProcessorAdapter(
-		client,
-		rdb,
+		tp.Tracer(),
+		httpClient,
+		redisClient,
 		repo,
 		adapterDefaultUrl,
 		adapterFallbackUrl,
@@ -92,16 +100,18 @@ func main() {
 		ServerHeader:  "Fiber",
 		AppName:       "High Performance API",
 	})
-
-	app.Post("/payments", handler.Process)
-	app.Get("/payments-summary", handler.Summary)
-	app.Post("/purge-payments", handler.Purge)
+	app.Use(otelfiber.Middleware())
+	handler.RegisterRoutes(app)
 
 	shouldMonitorHealth := utils.GetEnvOrSetDefault("MONITOR_HEALTH", "true")
-	adapter.EnableHealthCheck(shouldMonitorHealth)
+	if shouldMonitorHealth == "true" {
+		adapter.EnableHealthCheck()
+	}
 
 	shouldProfile := utils.GetEnvOrSetDefault("ENABLE_PROFILING", "false")
-	enableProfiling(shouldProfile)
+	if shouldProfile == "true" {
+		enableProfiling()
+	}
 
 	adapter.StartWorkers()
 
@@ -120,11 +130,7 @@ func sonicUnmarshal(data []byte, v any) error {
 	return sonic.Unmarshal(data, v)
 }
 
-func enableProfiling(shouldProfile string) {
-	if shouldProfile != "true" {
-		return
-	}
-
+func enableProfiling() {
 	slog.Info("profiling enabled")
 
 	err := os.Mkdir("prof", 0o755)

@@ -11,30 +11,43 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var PaymentHashMap = "payments"
 
 type PaymentRepository struct {
-	ctx context.Context
-	db  *redis.Client
+	tracer trace.Tracer
+	redis  *redis.Client
 }
 
-func NewPaymentRepository(db *redis.Client) *PaymentRepository {
+func NewPaymentRepository(tracer trace.Tracer, redis *redis.Client) *PaymentRepository {
 	return &PaymentRepository{
-		ctx: context.Background(),
-		db:  db,
+		tracer: tracer,
+		redis:  redis,
 	}
 }
 
-func (r *PaymentRepository) Add(payment PaymentProcessed) error {
+func (r *PaymentRepository) Add(ctx context.Context, payment PaymentProcessed) error {
+	ctx, span := r.tracer.Start(ctx, "repository.Add")
+	defer span.End()
+
+	var err error
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+	}()
+
 	raw, err := sonic.Marshal(payment)
 	if err != nil {
 		slog.Error("failed to marshal payment", "err", err)
 		return err
 	}
 
-	err = r.db.HSet(r.ctx, PaymentHashMap, payment.CorrelationId, raw).Err()
+	err = r.redis.HSet(ctx, PaymentHashMap, payment.CorrelationId, raw).Err()
 	if err != nil {
 		slog.Error("failed to save payment in redis hashmap", "err", err)
 	}
@@ -43,6 +56,17 @@ func (r *PaymentRepository) Add(payment PaymentProcessed) error {
 }
 
 func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, error) {
+	ctx, span := r.tracer.Start(context.Background(), "repository.Summary")
+	defer span.End()
+
+	var err error
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+	}()
+
 	response := SummaryResponse{
 		DefaultSummary: SummaryTotalRequestsResponse{
 			TotalRequests: 0,
@@ -70,7 +94,7 @@ func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, err
 		filterByTime = err == nil
 	}
 
-	payments, err := r.db.HGetAll(r.ctx, PaymentHashMap).Result()
+	payments, err := r.redis.HGetAll(ctx, PaymentHashMap).Result()
 	if err != nil {
 		slog.Error("failed to get payments from redis hashmap", "err", err)
 		return SummaryResponse{}, err
@@ -110,8 +134,13 @@ func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, err
 }
 
 func (r *PaymentRepository) Purge() error {
-	err := r.db.Del(r.ctx, "payments").Err()
+	ctx, span := r.tracer.Start(context.Background(), "repository.Purge")
+	defer span.End()
+
+	err := r.redis.Del(ctx, "payments").Err()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		slog.Error("failed to delete payments hash", "err", err)
 	}
 

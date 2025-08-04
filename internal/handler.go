@@ -17,6 +17,12 @@ func NewPaymentHandler(a *PaymentProcessorAdapter) *PaymentHandler {
 	}
 }
 
+func (h *PaymentHandler) RegisterRoutes(app *fiber.App) {
+	app.Post("/payments", h.Process)
+	app.Get("/payments-summary", h.Summary)
+	app.Post("/purge-payments", h.Purge)
+}
+
 func (h *PaymentHandler) Process(c *fiber.Ctx) error {
 	var req PaymentRequest
 	if err := c.BodyParser(&req); err != nil {

@@ -23,6 +23,11 @@ services:
     - ENABLE_PROFILING=false
     - WORKERS=20
     - RETRY_QUEUE_SIZE=6000
+    - OTEL_SERVICE_NAME=go-service-1
+    - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+    - OTEL_PROPAGATORS=tracecontext,baggage
+    depends_on:
+      - jaeger
     networks:
       - app
       - payment-processor
@@ -46,6 +51,11 @@ services:
     - ENABLE_PROFILING=false
     - WORKERS=20
     - RETRY_QUEUE_SIZE=6000
+    - OTEL_SERVICE_NAME=go-service-2
+    - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+    - OTEL_PROPAGATORS=tracecontext,baggage
+    depends_on:
+      - jaeger
     networks:
       - app
       - payment-processor
@@ -72,9 +82,10 @@ services:
 
   load-balancer:
     container_name: load-balancer-nginx
-    image: nginx:1.29-alpine
+    image: nginx:1.29.0-otel
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./opentelemetry_module.conf:/etc/nginx/conf.d/opentelemetry_module.conf
     depends_on:
       - go-backend-1
       - go-backend-2
@@ -87,6 +98,18 @@ services:
         limits:
           cpus: "0.2"
           memory: "50MB"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.71.0
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - JAEGER_PROPAGATION=w3c
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP/gRPC
+    networks:
+      - app
+      - payment-processor
 
 networks:
   app:

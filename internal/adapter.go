@@ -11,6 +11,8 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -22,25 +24,30 @@ var (
 const (
 	HealthCheckKeyDefault     = "health-check:default"
 	HealthCheckKeyFallback    = "health-check:fallback"
-	HealthCheckTicker         = 1 * time.Second
+	HealthCheckTicker         = 5 * time.Second
 	MinAcceptableResponseTime = 200 // in milliseconds
 )
 
 type PaymentProcessorAdapter struct {
-	client               *http.Client
-	db                   *redis.Client
-	repo                 *PaymentRepository
+	tracer trace.Tracer
+
+	httpClient           *http.Client
 	healthStatusDefault  atomic.Value
 	healthStatusFallback atomic.Value
 	defaultUrl           string
 	fallbackUrl          string
-	retryQueue           chan PaymentRequestProcessor
-	workers              int
+
+	redisClient *redis.Client
+	repo        *PaymentRepository
+
+	retryQueue chan PaymentRequestProcessor
+	workers    int
 }
 
 func NewPaymentProcessorAdapter(
-	client *http.Client,
-	db *redis.Client,
+	tracer trace.Tracer,
+	httpClient *http.Client,
+	redisClient *redis.Client,
 	repo *PaymentRepository,
 	defaultUrl string,
 	fallbackUrl string,
@@ -48,13 +55,17 @@ func NewPaymentProcessorAdapter(
 	workers int,
 ) *PaymentProcessorAdapter {
 	a := &PaymentProcessorAdapter{
-		client:      client,
-		db:          db,
-		repo:        repo,
+		tracer: tracer,
+
+		httpClient:  httpClient,
 		defaultUrl:  defaultUrl,
 		fallbackUrl: fallbackUrl,
-		retryQueue:  retryQueue,
-		workers:     workers,
+
+		redisClient: redisClient,
+		repo:        repo,
+
+		retryQueue: retryQueue,
+		workers:    workers,
 	}
 
 	a.healthStatusDefault.Store(HealthCheckResponse{
@@ -70,18 +81,23 @@ func NewPaymentProcessorAdapter(
 }
 
 func (a *PaymentProcessorAdapter) Process(payment PaymentRequestProcessor) {
-	err := a.innerProcess(payment)
+	ctx, span := a.tracer.Start(context.Background(), "adapter.Process")
+	defer span.End()
+
+	err := a.innerProcess(ctx, span, payment)
 	if err != nil {
 		a.retryQueue <- payment
 	}
 }
 
-func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) error {
+func (a *PaymentProcessorAdapter) innerProcess(ctx context.Context, span trace.Span, payment PaymentRequestProcessor) error {
 	healthStatusDefault := a.healthStatusDefault.Load().(HealthCheckResponse)
 
 	var err error
 	if !healthStatusDefault.Failing && healthStatusDefault.MinResponseTime < MinAcceptableResponseTime {
 		err = a.sendPayment(
+			ctx,
+			span,
 			payment,
 			a.defaultUrl+"/payments",
 			time.Second*10,
@@ -99,12 +115,21 @@ func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) 
 }
 
 func (a *PaymentProcessorAdapter) sendPayment(
+	ctx context.Context,
+	span trace.Span,
 	payment PaymentRequestProcessor,
 	url string,
 	timeout time.Duration,
 	endpoint PaymentEndpoint,
 ) error {
-	start1 := time.Now()
+	var err error
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+	}()
+
 	payment.UpdateRequestTime()
 	raw, err := sonic.ConfigFastest.Marshal(payment)
 	if err != nil {
@@ -112,10 +137,10 @@ func (a *PaymentProcessorAdapter) sendPayment(
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(raw))
 	if err != nil {
 		slog.Error("failed to create the request", "err", err)
 		return err
@@ -123,7 +148,7 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connection", "keep-alive")
 
-	res, err := a.client.Do(req)
+	res, err := a.httpClient.Do(req)
 	slog.Debug("response from the processor", "res", res, "err", err)
 	if res != nil {
 		defer res.Body.Close()
@@ -148,25 +173,14 @@ func (a *PaymentProcessorAdapter) sendPayment(
 		return ErrUnavailableProcessor
 	}
 
-	start2 := time.Now()
-	err = a.repo.Add(PaymentProcessed{
-		PaymentRequestProcessor: payment,
-		Processed:               endpoint,
-	})
-
-	if time.Since(start1).Milliseconds() > 80 {
-		slog.Debug("time of the complete request and db",
-			"dbTimeMs", time.Since(start2).Milliseconds(),
-			"requestTimeMs", time.Since(start1).Milliseconds(),
-			"healthStatusDefault", a.healthStatusDefault.Load().(HealthCheckResponse),
-			"healthStatusFallback", a.healthStatusFallback.Load().(HealthCheckResponse),
-			"endpoint", endpoint,
-			"err", err,
-			"requestAt", *payment.RequestedAt,
-		)
-	}
-	return err
+	return a.repo.Add(
+		ctx,
+		PaymentProcessed{
+			PaymentRequestProcessor: payment,
+			Processed:               endpoint,
+		})
 }
+
 func (a *PaymentProcessorAdapter) Summary(from, to string) (SummaryResponse, error) {
 	return a.repo.Summary(from, to)
 }
@@ -196,7 +210,7 @@ func (a *PaymentProcessorAdapter) purge(url string, token string) error {
 
 	req.Header.Set("X-Rinha-Token", token)
 
-	res, err := a.client.Do(req)
+	res, err := a.httpClient.Do(req)
 	if err != nil {
 		slog.Error("failed to purge the api", "error", err, "url", url)
 		return err
@@ -210,11 +224,7 @@ func (a *PaymentProcessorAdapter) purge(url string, token string) error {
 	return nil
 }
 
-func (a *PaymentProcessorAdapter) EnableHealthCheck(should string) {
-	if should != "true" {
-		return
-	}
-
+func (a *PaymentProcessorAdapter) EnableHealthCheck() {
 	go func() {
 		ticker := time.NewTicker(HealthCheckTicker)
 		defer ticker.Stop()
@@ -254,7 +264,7 @@ func (a *PaymentProcessorAdapter) storeHealthStatus(url string, key string) erro
 		return err
 	}
 
-	if err := a.db.Set(context.Background(), key, rawBody, 0).Err(); err != nil {
+	if err := a.redisClient.Set(context.Background(), key, rawBody, 0).Err(); err != nil {
 		slog.Debug("failed to save health check in redis", "err", err)
 		return err
 	}
@@ -272,7 +282,7 @@ func (a *PaymentProcessorAdapter) retrieveHealth(url string) (HealthCheckRespons
 		return HealthCheckResponse{}, err
 	}
 
-	res, err := a.client.Do(req)
+	res, err := a.httpClient.Do(req)
 	if res == nil || err != nil || res.StatusCode != 200 {
 		slog.Debug("failed to health check", "url", url)
 		return HealthCheckResponse{}, err
@@ -324,7 +334,7 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 }
 
 func (a *PaymentProcessorAdapter) syncHealthStatus(key string) error {
-	resBody, err := a.db.Get(context.Background(), key).Result()
+	resBody, err := a.redisClient.Get(context.Background(), key).Result()
 	if err != nil {
 		slog.Debug("failed to get the health check", "err", err)
 		return err
