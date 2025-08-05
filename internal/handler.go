@@ -5,15 +5,19 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type PaymentHandler struct {
-	a *PaymentProcessorAdapter
+	adapter *PaymentProcessorAdapter
+	tracer  trace.Tracer
 }
 
-func NewPaymentHandler(a *PaymentProcessorAdapter) *PaymentHandler {
+func NewPaymentHandler(adapter *PaymentProcessorAdapter, tracer trace.Tracer) *PaymentHandler {
 	return &PaymentHandler{
-		a: a,
+		adapter: adapter,
+		tracer:  tracer,
 	}
 }
 
@@ -24,26 +28,35 @@ func (h *PaymentHandler) RegisterRoutes(app *fiber.App) {
 }
 
 func (h *PaymentHandler) Process(c *fiber.Ctx) error {
+	_, span := h.tracer.Start(c.Context(), "handler.Process")
+	defer span.End()
+
 	var req PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
 		slog.Error("failed to parse the request body", "error", err)
 		return c.SendStatus(http.StatusBadRequest)
 	}
 
+	span.SetAttributes(
+		attribute.String("payment.correlation_id", req.CorrelationId),
+	)
+
 	payment := PaymentRequestProcessor{
 		req,
 		nil,
 	}
 
-	go h.a.Process(payment)
+	go h.adapter.Process(payment)
 	return c.SendStatus(http.StatusAccepted)
 }
 
 func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
+	ctx := c.Context()
+
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 
-	summary, err := h.a.Summary(fromStr, toStr)
+	summary, err := h.adapter.Summary(ctx, fromStr, toStr)
 	if err != nil {
 		return c.SendStatus(http.StatusInternalServerError)
 	}
@@ -52,13 +65,14 @@ func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
 }
 
 func (h *PaymentHandler) Purge(c *fiber.Ctx) error {
+	ctx := c.Context()
 	tokenStr := c.Get("X-Rinha-Token")
 
 	if tokenStr == "" {
 		tokenStr = "123"
 	}
 
-	if err := h.a.Purge(tokenStr); err != nil {
+	if err := h.adapter.Purge(ctx, tokenStr); err != nil {
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 

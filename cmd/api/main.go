@@ -89,7 +89,7 @@ func main() {
 		workersInt,
 	)
 
-	handler := internal.NewPaymentHandler(adapter)
+	handler := internal.NewPaymentHandler(adapter, tp.Tracer())
 	app := fiber.New(fiber.Config{
 		JSONEncoder: sonicMarshal,
 		JSONDecoder: sonicUnmarshal,

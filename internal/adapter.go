@@ -11,6 +11,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -130,6 +131,10 @@ func (a *PaymentProcessorAdapter) sendPayment(
 		}
 	}()
 
+	span.SetAttributes(
+		attribute.String("payment.correlation_id", payment.CorrelationId),
+	)
+
 	payment.UpdateRequestTime()
 	raw, err := sonic.ConfigFastest.Marshal(payment)
 	if err != nil {
@@ -181,12 +186,12 @@ func (a *PaymentProcessorAdapter) sendPayment(
 		})
 }
 
-func (a *PaymentProcessorAdapter) Summary(from, to string) (SummaryResponse, error) {
-	return a.repo.Summary(from, to)
+func (a *PaymentProcessorAdapter) Summary(ctx context.Context, from, to string) (SummaryResponse, error) {
+	return a.repo.Summary(ctx, from, to)
 }
 
-func (a *PaymentProcessorAdapter) Purge(token string) error {
-	if err := a.repo.Purge(); err != nil {
+func (a *PaymentProcessorAdapter) Purge(ctx context.Context, token string) error {
+	if err := a.repo.Purge(ctx); err != nil {
 		return err
 	}
 	if err := a.purge(a.defaultUrl+"/admin/purge-payments", token); err != nil {
@@ -230,9 +235,13 @@ func (a *PaymentProcessorAdapter) EnableHealthCheck() {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			if err := a.storeHealthStatus(a.defaultUrl+"/payments/service-health", HealthCheckKeyDefault); err != nil {
+			ctx, span := a.tracer.Start(context.Background(), "adapter.EnableHealthCheckDefault")
+
+			if err := a.storeHealthStatus(ctx, a.defaultUrl+"/payments/service-health", HealthCheckKeyDefault); err != nil {
 				slog.Debug("failed to update the health check", "err", err)
 			}
+
+			span.End()
 		}
 	}()
 
@@ -241,15 +250,19 @@ func (a *PaymentProcessorAdapter) EnableHealthCheck() {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			if err := a.storeHealthStatus(a.fallbackUrl+"/payments/service-health", HealthCheckKeyFallback); err != nil {
+			ctx, span := a.tracer.Start(context.Background(), "adapter.EnableHealthCheckFallback")
+
+			if err := a.storeHealthStatus(ctx, a.fallbackUrl+"/payments/service-health", HealthCheckKeyFallback); err != nil {
 				slog.Debug("failed to update the health check", "err", err)
 			}
+
+			span.End()
 		}
 	}()
 }
 
-func (a *PaymentProcessorAdapter) storeHealthStatus(url string, key string) error {
-	resDefault, err := a.retrieveHealth(url)
+func (a *PaymentProcessorAdapter) storeHealthStatus(ctx context.Context, url string, key string) error {
+	resDefault, err := a.retrieveHealth(ctx, url)
 	if err != nil {
 		return err
 	}
@@ -264,7 +277,7 @@ func (a *PaymentProcessorAdapter) storeHealthStatus(url string, key string) erro
 		return err
 	}
 
-	if err := a.redisClient.Set(context.Background(), key, rawBody, 0).Err(); err != nil {
+	if err := a.redisClient.Set(ctx, key, rawBody, 0).Err(); err != nil {
 		slog.Debug("failed to save health check in redis", "err", err)
 		return err
 	}
@@ -273,8 +286,8 @@ func (a *PaymentProcessorAdapter) storeHealthStatus(url string, key string) erro
 	return nil
 }
 
-func (a *PaymentProcessorAdapter) retrieveHealth(url string) (HealthCheckResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+func (a *PaymentProcessorAdapter) retrieveHealth(ctx context.Context, url string) (HealthCheckResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*1)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -334,7 +347,10 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 }
 
 func (a *PaymentProcessorAdapter) syncHealthStatus(key string) error {
-	resBody, err := a.redisClient.Get(context.Background(), key).Result()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
+
+	resBody, err := a.redisClient.Get(ctx, key).Result()
 	if err != nil {
 		slog.Debug("failed to get the health check", "err", err)
 		return err

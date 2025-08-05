@@ -1,21 +1,23 @@
 package internal
 
 import (
-	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
-	"rinha-with-go-2025/pkg/utils"
-
-	"github.com/bytedance/sonic"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
-var PaymentHashMap = "payments"
+const (
+	PaymentSortedSetDefault  = "payments:default"
+	PaymentSortedSetFallback = "payments:fallback"
+)
 
 type PaymentRepository struct {
 	tracer trace.Tracer
@@ -41,22 +43,33 @@ func (r *PaymentRepository) Add(ctx context.Context, payment PaymentProcessed) e
 		}
 	}()
 
-	raw, err := sonic.Marshal(payment)
+	var key string
+	if payment.Processed == PaymentEndpointDefault {
+		key = PaymentSortedSetDefault
+	} else {
+		key = PaymentSortedSetFallback
+	}
+
+	requestedAt, err := time.Parse(time.RFC3339Nano, *payment.RequestedAt)
 	if err != nil {
-		slog.Error("failed to marshal payment", "err", err)
+		slog.Error("failed to process a payment given the requestedAt parsing", "err", err)
 		return err
 	}
 
-	err = r.redis.HSet(ctx, PaymentHashMap, payment.CorrelationId, raw).Err()
+	err = r.redis.ZAdd(ctx, key, redis.Z{
+		Score:  float64(requestedAt.UnixMilli()),
+		Member: fmt.Sprintf("%s:%f", payment.CorrelationId, payment.Amount),
+	}).Err()
+
 	if err != nil {
-		slog.Error("failed to save payment in redis hashmap", "err", err)
+		slog.Error("failed to save payment in redis sorted set", "err", err)
 	}
 
 	return err
 }
 
-func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, error) {
-	ctx, span := r.tracer.Start(context.Background(), "repository.Summary")
+func (r *PaymentRepository) Summary(ctx context.Context, fromStr, toStr string) (SummaryResponse, error) {
+	ctx, span := r.tracer.Start(ctx, "repository.Summary")
 	defer span.End()
 
 	var err error
@@ -67,81 +80,96 @@ func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, err
 		}
 	}()
 
-	response := SummaryResponse{
-		DefaultSummary: SummaryTotalRequestsResponse{
-			TotalRequests: 0,
-			TotalAmount:   0.0,
-		},
-		FallbackSummary: SummaryTotalRequestsResponse{
-			TotalRequests: 0,
-			TotalAmount:   0.0,
-		},
-	}
-
 	var from, to time.Time
-	filterByTime := false
-	if fromStr != "" && toStr != "" {
-		var err error
+	var min, max string
+	if fromStr == "" || toStr == "" {
+		min = "-inf"
+		max = "+inf"
+	} else {
 		from, err = time.Parse(time.RFC3339Nano, fromStr)
 		if err != nil {
 			slog.Error("failed to parse the from", "err", err, "from", fromStr)
+			return SummaryResponse{}, err
 		}
 		to, err = time.Parse(time.RFC3339Nano, toStr)
 		if err != nil {
 			slog.Error("failed to parse the to", "err", err, "to", toStr)
+			return SummaryResponse{}, err
 		}
 
-		filterByTime = err == nil
+		min = fmt.Sprintf("%d", from.UnixMilli())
+		max = fmt.Sprintf("%d", to.UnixMilli())
 	}
 
-	payments, err := r.redis.HGetAll(ctx, PaymentHashMap).Result()
-	if err != nil {
-		slog.Error("failed to get payments from redis hashmap", "err", err)
+	var defaultPayments, fallbackPayments []string
+	var defaultSummary, fallbackSummary SummaryTotalRequestsResponse
+
+	pipe := r.redis.Pipeline()
+	cmdDefault := pipe.ZRangeByScore(ctx, PaymentSortedSetDefault, &redis.ZRangeBy{Min: min, Max: max})
+	cmdFallback := pipe.ZRangeByScore(ctx, PaymentSortedSetFallback, &redis.ZRangeBy{Min: min, Max: max})
+	_, err = pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		slog.Error("failed to execute pipeline", "err", err)
 		return SummaryResponse{}, err
 	}
 
-	for _, v := range payments {
-		var payment PaymentProcessed
-		decoder := sonic.ConfigFastest.NewDecoder(bytes.NewReader([]byte(v)))
-		if err := decoder.Decode(&payment); err != nil {
-			slog.Error("failed to process a payment", "err", err)
-			return SummaryResponse{}, err
-		}
-
-		requestedAt, err := time.Parse(time.RFC3339Nano, *payment.RequestedAt)
-		if err != nil {
-			slog.Error("failed to process a payment given the requestedAt parsing", "err", err)
-			return SummaryResponse{}, err
-		}
-
-		if filterByTime && !utils.IsWithInRange(requestedAt, from, to) {
-			continue
-		}
-
-		if payment.Processed == PaymentEndpointDefault {
-			response.DefaultSummary.TotalAmount += payment.Amount
-			response.DefaultSummary.TotalRequests++
-		}
-		if payment.Processed == PaymentEndpointFallback {
-			response.FallbackSummary.TotalAmount += payment.Amount
-			response.FallbackSummary.TotalRequests++
-		}
+	defaultPayments, err = cmdDefault.Result()
+	if err != nil && err != redis.Nil {
+		slog.Error("failed to get default payments", "err", err)
 	}
 
-	response.DefaultSummary.TotalAmount = math.Round(response.DefaultSummary.TotalAmount*100) / 100
-	response.FallbackSummary.TotalAmount = math.Round(response.FallbackSummary.TotalAmount*100) / 100
+	fallbackPayments, err = cmdFallback.Result()
+	if err != nil && err != redis.Nil {
+		slog.Error("failed to get fallback payments", "err", err)
+	}
+
+	for _, p := range defaultPayments {
+		parts := strings.Split(p, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		amount, _ := strconv.ParseFloat(parts[1], 64)
+		defaultSummary.TotalAmount += amount
+	}
+
+	for _, p := range fallbackPayments {
+		parts := strings.Split(p, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		amount, _ := strconv.ParseFloat(parts[1], 64)
+		fallbackSummary.TotalAmount += amount
+	}
+
+	response := SummaryResponse{
+		DefaultSummary: SummaryTotalRequestsResponse{
+			TotalRequests: len(defaultPayments),
+			TotalAmount:   math.Round(defaultSummary.TotalAmount*100) / 100,
+		},
+		FallbackSummary: SummaryTotalRequestsResponse{
+			TotalRequests: len(fallbackPayments),
+			TotalAmount:   math.Round(fallbackSummary.TotalAmount*100) / 100,
+		},
+	}
+
 	return response, nil
 }
 
-func (r *PaymentRepository) Purge() error {
-	ctx, span := r.tracer.Start(context.Background(), "repository.Purge")
+func (r *PaymentRepository) Purge(ctx context.Context) error {
+	ctx, span := r.tracer.Start(ctx, "repository.Purge")
 	defer span.End()
 
-	err := r.redis.Del(ctx, "payments").Err()
+	var err error
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+	}()
+
+	err = r.redis.Del(ctx, PaymentSortedSetDefault, PaymentSortedSetFallback).Err()
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		slog.Error("failed to delete payments hash", "err", err)
+		slog.Error("failed to delete payments sorted sets", "err", err)
 	}
 
 	return err
