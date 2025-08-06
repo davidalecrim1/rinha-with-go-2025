@@ -23,6 +23,7 @@ const (
 	HealthCheckKeyDefault  = "health-check:default"
 	HealthCheckKeyFallback = "health-check:fallback"
 	HealthCheckTicker      = 1 * time.Second
+	MinimumResponseTime    = 100 // in milliseconds
 )
 
 type PaymentProcessorAdapter struct {
@@ -80,14 +81,14 @@ func (a *PaymentProcessorAdapter) innerProcess(payment PaymentRequestProcessor) 
 	healthStatusFallback := a.healthStatusFallback.Load().(HealthCheckResponse)
 
 	var err error
-	if !healthStatusDefault.Failing && healthStatusDefault.MinResponseTime < 80 {
+	if !healthStatusDefault.Failing && healthStatusDefault.MinResponseTime < MinimumResponseTime {
 		err = a.sendPayment(
 			payment,
 			a.defaultUrl+"/payments",
 			time.Second*10,
 			PaymentEndpointDefault,
 		)
-	} else if !healthStatusFallback.Failing && healthStatusFallback.MinResponseTime < 80 {
+	} else if !healthStatusFallback.Failing && healthStatusFallback.MinResponseTime < MinimumResponseTime {
 		err = a.sendPayment(
 			payment,
 			a.fallbackUrl+"/payments",
@@ -132,16 +133,23 @@ func (a *PaymentProcessorAdapter) sendPayment(
 	req.Header.Set("Connection", "keep-alive")
 
 	res, err := a.client.Do(req)
-	slog.Debug("response from api", "url", url, "res", res, "payment", payment)
+	slog.Debug("response from the processor", "res", res, "err", err)
 
-	if res != nil && res.StatusCode != 200 {
+	if res != nil && res.StatusCode == 422 {
+		return nil
+	}
+	if res != nil && res.StatusCode == 500 {
 		return ErrUnavailableProcessor
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return ErrUnavailableProcessor
 	}
+	if res != nil && res.StatusCode != 200 {
+		slog.Error("failed to process the request", "err", err, "res", res)
+		return ErrUnavailableProcessor
+	}
 	if err != nil || res == nil {
-		slog.Debug("failed to process the request", "err", err, "res", res)
+		slog.Error("failed to process the request", "err", err, "res", res)
 		return ErrUnavailableProcessor
 	}
 
@@ -289,7 +297,7 @@ func (a *PaymentProcessorAdapter) StartWorkers() {
 
 	go func() {
 		for {
-			slog.Debug("Status of queue", "lenRetryQueue", len(a.retryQueue))
+			slog.Info("Status of queue", "lenRetryQueue", len(a.retryQueue))
 			time.Sleep(3 * time.Second)
 		}
 	}()
