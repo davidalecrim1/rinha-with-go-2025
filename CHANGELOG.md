@@ -152,3 +152,14 @@
 **Changes**:
 - Improved the health check to avoid inconsistencies.
 - Still have inconsistencies sometimes. I will need to dive deep in this.
+
+# v.0.10.0 (Async - MongoDB)
+
+**Commit:** e42829858b063344021fbba323c8fe9dbb73c4c5
+**Load Test Commit Version**: be9c02cc37baf0ff6229364b981ba86839e938a5
+**Load Test Result**:
+
+**Changes**:
+- Fix a bug on the retry logic to avoid excessive retries.
+- Reduce the workers to the minimum possible.
+- I still find some inconsistencies.
