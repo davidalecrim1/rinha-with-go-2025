@@ -170,7 +170,7 @@
 
 **Commit:** 002532d8be71598f40cdb7fd4e577f1029f32624
 **Load Test Commit Version**: 88db512e74d52cd6e1a0109dafcd435519fbc2b5
-**Load Test Result**: N/A
+**Load Test Result**: report_20250807_105639.html
 
 **Changes**:
 - Add a SortedSet instead of Hashmap to reduce the p99 from /Summary endpoint.
