@@ -48,6 +48,6 @@ push-image:
 build-for-amd64:
 	docker buildx build \
 	--platform linux/amd64 \
-	-t davidalecrim1/rinha-with-go-2025:v0.11-redis \
+	-t davidalecrim1/rinha-with-go-2025:v0.12-redis \
 	--push \
 	.

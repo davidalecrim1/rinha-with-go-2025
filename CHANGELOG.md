@@ -151,3 +151,12 @@
 **Changes**:
 - Fix retry logic to avoid 422 reprocessing.
 - Fine tune workers and queue to work faster.
+
+# v.0.12.0 (Async - Redis)
+
+**Commit:** ddbbc7896d411d7978e0a1aa913e6840d85b0bfe
+**Load Test Commit Version**: 88db512e74d52cd6e1a0109dafcd435519fbc2b5
+**Load Test Result**: report_20250807_104303.html
+
+**Changes**:
+- Change the Summary API response time switching the data structure of redis from a hashmap to a sortedset.
