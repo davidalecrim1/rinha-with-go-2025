@@ -163,3 +163,12 @@
 - Fix a bug on the retry logic to avoid excessive retries.
 - Reduce the workers to the minimum possible.
 - I still find some inconsistencies.
+
+# v.0.11.0 (Async - MongoDB)
+
+**Commit:** 27e6eaa03736b627bcd76e1d568dcaca9d19f5a4
+**Load Test Commit Version**: 839ed64f8da076979cfbba85f0bab37fea963309
+**Load Test Result**: report_20250808_100734.html
+
+**Changes**:
+- Solve this version inconsistency. It was caused buy the filter LTE (less than or equal to) instead of LT (less than). Changing it to LT solved the issue.
