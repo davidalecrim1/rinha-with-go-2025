@@ -23,7 +23,7 @@ const (
 	HealthCheckKeyDefault  = "health-check:default"
 	HealthCheckKeyFallback = "health-check:fallback"
 	HealthCheckTicker      = 1 * time.Second
-	MinimumResponseTime    = 100 // in milliseconds
+	MinimumResponseTime    = 200 // in milliseconds
 )
 
 type PaymentProcessorAdapter struct {
