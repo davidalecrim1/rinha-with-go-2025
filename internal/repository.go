@@ -101,7 +101,7 @@ func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, err
 			"$match": bson.M{
 				"requestedAt": bson.M{
 					"$gte": from,
-					"$lte": to,
+					"$lt":  to,
 				},
 			},
 		}
