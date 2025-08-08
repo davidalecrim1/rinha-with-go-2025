@@ -16,7 +16,8 @@ type Config struct {
 	LogLevel        slog.Level
 	RedisAddr       string
 
-	NumWorkers int
+	NumWorkers            int
+	LengthProcessorBuffer int
 
 	UnixSocketPath string
 }
@@ -35,6 +36,7 @@ func (c *Config) Load() {
 	c.RedisAddr = utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
 
 	c.NumWorkers, _ = strconv.Atoi(utils.GetEnvOrSetDefault("WORKERS", "15"))
+	c.LengthProcessorBuffer, _ = strconv.Atoi(utils.GetEnvOrSetDefault("LENGTH_PROCESSOR_BUFFER", "6000"))
 
 	c.UnixSocketPath = utils.GetEnvOrSetDefault("UNIX_SOCKET", "/var/run/api.sock")
 }

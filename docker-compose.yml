@@ -18,7 +18,7 @@ services:
       - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - ENABLE_PROFILING=false
-      - REDIS_ADDR=redis-db:6379
+      - REDIS_ADDR=/var/run/redis.sock
       - UNIX_SOCKET=/var/run/api_1.sock
     networks:
       - app
@@ -36,7 +36,7 @@ services:
       - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - ENABLE_PROFILING=false
-      - REDIS_ADDR=redis-db:6379
+      - REDIS_ADDR=/var/run/redis.sock
       - UNIX_SOCKET=/var/run/api_2.sock
     networks:
       - app
@@ -58,13 +58,16 @@ services:
       - redis
       - go-backend-1
       - go-backend-2
+    volumes:
+      - api-sockets:/var/run:rw
     environment:
       - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
-      - REDIS_ADDR=redis-db:6379
-      - WORKERS=50
+      - REDIS_ADDR=/var/run/redis.sock
+      - WORKERS=10
+      - LENGTH_PROCESSOR_BUFFER=10000
     deploy:
       resources:
         limits:
@@ -72,14 +75,15 @@ services:
           memory: "100MB"
 
   redis:
-    image: redis:8.0-alpine
+    image: redis:8.0
     container_name: redis-db
-    command: redis-server --save "" --appendonly no --maxclients 20000
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis.conf
+      - api-sockets:/var/run:rw
+    command: bash -c "rm -rf /var/run/redis.sock && redis-server /usr/local/etc/redis.conf"
     networks:
       - app
       - payment-processor
-    ports:
-      - "6379:6379"
     deploy:
       resources:
         limits:
@@ -96,7 +100,7 @@ services:
       - go-backend-1
       - go-backend-2
     ports:
-      - "9999:9999"
+      - "9999:80"
     networks:
       - app
     deploy:

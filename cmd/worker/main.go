@@ -31,23 +31,28 @@ func main() {
 
 	httpClient := &http.Client{
 		Transport: &http.Transport{
-			MaxIdleConns:        30,
-			MaxIdleConnsPerHost: 15,
-			IdleConnTimeout:     120 * time.Second,
-			MaxConnsPerHost:     20,
-			DisableCompression:  true,
-			DisableKeepAlives:   false,
-			ForceAttemptHTTP2:   false,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			MaxConnsPerHost:     100,
+
+			IdleConnTimeout:       30 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+
+			DisableCompression: true,
+			DisableKeepAlives:  false,
+			ForceAttemptHTTP2:  false,
 
 			DialContext: (&net.Dialer{
-				Timeout:   1 * time.Second,
-				KeepAlive: 30 * time.Second,
+				Timeout:   100 * time.Millisecond,
+				KeepAlive: 90 * time.Second,
 				DualStack: true,
 			}).DialContext,
 		},
 	}
 
 	redisClient := redis.NewClient(&redis.Options{
+		Network:  "unix",
 		Addr:     cfg.RedisAddr,
 		Password: "",
 		DB:       0,

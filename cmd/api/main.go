@@ -14,9 +14,8 @@ import (
 	"rinha-with-go-2025/internal"
 	"rinha-with-go-2025/pkg/profiling"
 
-	"github.com/bytedance/sonic"
-	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/valyala/fasthttp"
 )
 
 func main() {
@@ -32,27 +31,30 @@ func main() {
 		profiling.ProfileApplication(time.Minute * 2)
 	}
 
-	tr := &http.Transport{
-		MaxIdleConns:        30,
-		MaxIdleConnsPerHost: 15,
-		IdleConnTimeout:     120 * time.Second,
-		MaxConnsPerHost:     20,
-		DisableCompression:  true,
-		DisableKeepAlives:   false,
-		ForceAttemptHTTP2:   false,
-
-		DialContext: (&net.Dialer{
-			Timeout:   1 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-	}
-
 	httpClient := &http.Client{
-		Transport: tr,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			MaxConnsPerHost:     100,
+
+			IdleConnTimeout:       30 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+
+			DisableCompression: true,
+			DisableKeepAlives:  false,
+			ForceAttemptHTTP2:  false,
+
+			DialContext: (&net.Dialer{
+				Timeout:   100 * time.Millisecond,
+				KeepAlive: 90 * time.Second,
+				DualStack: true,
+			}).DialContext,
+		},
 	}
 
 	redisClient := redis.NewClient(&redis.Options{
+		Network:  "unix",
 		Addr:     cfg.RedisAddr,
 		Password: "",
 		DB:       0,
@@ -70,23 +72,6 @@ func main() {
 	)
 
 	handler := internal.NewPaymentHandler(adapter)
-	app := fiber.New(fiber.Config{
-		JSONEncoder: sonicMarshal,
-		JSONDecoder: sonicUnmarshal,
-
-		Prefork:                   false,
-		CaseSensitive:             true,
-		StrictRouting:             false,
-		ServerHeader:              "",
-		AppName:                   "",
-		DisableDefaultDate:        true,
-		DisableDefaultContentType: true,
-		DisableHeaderNormalizing:  true,
-		DisableStartupMessage:     true,
-	})
-
-	handler.RegisterRoutes(app)
-
 	if _, err := os.Stat(cfg.UnixSocketPath); err == nil {
 		os.Remove(cfg.UnixSocketPath)
 	}
@@ -101,19 +86,11 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		app.Shutdown()
+		listener.Close()
 	}()
 
 	slog.Info("starting app on unix socket", "socketPath", cfg.UnixSocketPath)
-	if err := app.Listener(listener); err != nil {
-		panic(fmt.Errorf("error starting Fiber app: %v", err))
+	if err := fasthttp.Serve(listener, handler.Router); err != nil {
+		panic(fmt.Errorf("error starting fasthttp server: %v", err))
 	}
-}
-
-func sonicMarshal(v any) ([]byte, error) {
-	return sonic.ConfigFastest.Marshal(v)
-}
-
-func sonicUnmarshal(data []byte, v any) error {
-	return sonic.ConfigFastest.Unmarshal(data, v)
 }
