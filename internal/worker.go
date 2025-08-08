@@ -102,13 +102,8 @@ func (w *PaymentProcessor) sendPayment(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connection", "keep-alive")
 
-	if err := w.client.DoDeadline(req, res, time.Now().Add(timeout)); err != nil {
-		slog.Error("failed to send the request", "err", err)
-		return err
-	}
-
+	err = w.client.DoDeadline(req, res, time.Now().Add(timeout))
 	slog.Debug("response from the processor", "res", res, "err", err)
-
 	if res != nil && res.StatusCode() == 422 {
 		return nil
 	}
