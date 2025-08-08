@@ -26,7 +26,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.25"
           memory: "50MB"
 
   go-backend-2:
@@ -46,7 +46,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.25"
           memory: "50MB"
 
   go-worker-1:
@@ -95,7 +95,7 @@ services:
 
   load-balancer:
     container_name: load-balancer-extreme-proxy
-    image: davidalecrim1/extreme-proxy:v0.4.0
+    image: davidalecrim1/extreme-proxy:v0.6.14
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     depends_on:
@@ -108,7 +108,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
+          cpus: "0.3"
           memory: "50MB"
 
 networks:
