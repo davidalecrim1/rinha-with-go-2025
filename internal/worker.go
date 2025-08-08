@@ -1,15 +1,16 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"sync/atomic"
 	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/redis/go-redis/v9"
-	"github.com/valyala/fasthttp"
 )
 
 const (
@@ -25,20 +26,20 @@ const (
 )
 
 type PaymentProcessor struct {
-	redis                *redis.Client
-	client               *fasthttp.HostClient
+	redisClient          *redis.Client
+	httpClient           *http.Client
 	repo                 *PaymentRepository
 	healthStatusDefault  atomic.Value
 	healthStatusFallback atomic.Value
-	workers              int
+	cfg                  *Config
 }
 
-func NewPaymentProcessor(redis *redis.Client, client *fasthttp.HostClient, repo *PaymentRepository, workers int) *PaymentProcessor {
+func NewPaymentProcessor(redis *redis.Client, httpClient *http.Client, repo *PaymentRepository, cfg *Config) *PaymentProcessor {
 	w := &PaymentProcessor{
-		redis:   redis,
-		client:  client,
-		repo:    repo,
-		workers: workers,
+		redisClient: redis,
+		httpClient:  httpClient,
+		repo:        repo,
+		cfg:         cfg,
 	}
 
 	w.healthStatusDefault.Store(HealthCheckResponse{
@@ -61,7 +62,7 @@ func (w *PaymentProcessor) innerProcess(payment PaymentRequestProcessor) error {
 	if !healthStatusDefault.Failing && healthStatusDefault.MinResponseTime < MinAcceptableResponseTime {
 		err = w.sendPayment(
 			payment,
-			"/payments",
+			w.cfg.PaymentProcessorDefault+"/payments",
 			time.Second*10,
 			PaymentEndpointDefault,
 		)
@@ -78,11 +79,10 @@ func (w *PaymentProcessor) innerProcess(payment PaymentRequestProcessor) error {
 
 func (w *PaymentProcessor) sendPayment(
 	payment PaymentRequestProcessor,
-	path string,
+	url string,
 	timeout time.Duration,
 	endpoint PaymentEndpoint,
 ) error {
-	// start1 := time.Now()
 	payment.UpdateRequestTime()
 	raw, err := sonic.ConfigFastest.Marshal(payment)
 	if err != nil {
@@ -90,64 +90,45 @@ func (w *PaymentProcessor) sendPayment(
 		return err
 	}
 
-	req := fasthttp.AcquireRequest()
-	res := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseRequest(req)
-	defer fasthttp.ReleaseResponse(res)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-	req.SetRequestURI(path)
-	req.SetHost(w.client.Addr)
-	req.Header.SetMethod(fasthttp.MethodPost)
-	req.SetBody(raw)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+	if err != nil {
+		slog.Error("failed to create the request", "err", err)
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connection", "keep-alive")
 
-	if err := w.client.DoDeadline(req, res, time.Now().Add(timeout)); err != nil {
-		slog.Error("failed to send the request", "err", err)
-		return err
-	}
-
+	res, err := w.httpClient.Do(req)
 	slog.Debug("response from the processor", "res", res, "err", err)
-
-	if res != nil && res.StatusCode() == 422 {
-		return nil
-	}
-	if res != nil && res.StatusCode() == 500 {
+	if err != nil || res == nil {
+		slog.Error("failed to process the request", "err", err, "res", res)
 		return ErrUnavailableProcessor
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return ErrUnavailableProcessor
 	}
-	if res != nil && res.StatusCode() != 200 {
-		slog.Error("failed to process the request", "err", err, "res", res)
+	if res.StatusCode == 422 {
+		return nil
+	}
+	if res.StatusCode == 500 {
 		return ErrUnavailableProcessor
 	}
-	if err != nil || res == nil {
+	if res.StatusCode != 200 {
 		slog.Error("failed to process the request", "err", err, "res", res)
 		return ErrUnavailableProcessor
 	}
 
-	//start2 := time.Now()
-	err = w.repo.Add(PaymentProcessed{
+	return w.repo.Add(PaymentProcessed{
 		PaymentRequestProcessor: payment,
 		Processed:               endpoint,
 	})
-
-	// if time.Since(start1).Milliseconds() > 80 {
-	// 	slog.Debug("time of the complete request and db",
-	// 		"dbTimeMs", time.Since(start2).Milliseconds(),
-	// 		"requestTimeMs", time.Since(start1).Milliseconds(),
-	// 		"healthStatusDefault", w.healthStatusDefault.Load().(HealthCheckResponse),
-	// 		"healthStatusFallback", w.healthStatusFallback.Load().(HealthCheckResponse),
-	// 		"endpoint", endpoint,
-	// 		"err", err,
-	// 		"requestAt", *payment.RequestedAt,
-	// 	)
-	// }
-	return err
 }
 
 func (w *PaymentProcessor) EnableHealthCheck(ctx context.Context) {
+	// Retrieve the health check from the processors and store in redis
 	go func() {
 		ticker := time.NewTicker(HealthCheckTicker)
 		defer ticker.Stop()
@@ -197,7 +178,7 @@ func (w *PaymentProcessor) storeHealthStatus(path string, key string) error {
 		return err
 	}
 
-	if err := w.redis.Set(context.Background(), key, rawBody, 0).Err(); err != nil {
+	if err := w.redisClient.Set(context.Background(), key, rawBody, 0).Err(); err != nil {
 		slog.Debug("failed to save health check in redis", "err", err)
 		return err
 	}
@@ -207,20 +188,24 @@ func (w *PaymentProcessor) storeHealthStatus(path string, key string) error {
 }
 
 func (w *PaymentProcessor) retrieveHealth(path string) (HealthCheckResponse, error) {
-	req := fasthttp.AcquireRequest()
-	req.SetRequestURI(path)
-	req.Header.SetMethod(fasthttp.MethodGet)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
 
-	res := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(res)
-
-	if err := w.client.DoDeadline(req, res, time.Now().Add(time.Second*1)); err != nil {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
+	if err != nil {
 		slog.Debug("failed to health check", "path", path)
 		return HealthCheckResponse{}, err
 	}
 
+	res, err := w.httpClient.Do(req)
+	if err != nil {
+		slog.Debug("failed to health check", "path", path)
+		return HealthCheckResponse{}, err
+	}
+	defer res.Body.Close()
+
 	var body HealthCheckResponse
-	if err := sonic.Unmarshal(res.Body(), &body); err != nil {
+	if err := sonic.ConfigFastest.NewDecoder(res.Body).Decode(&body); err != nil {
 		slog.Debug("failed to parse the response", "path", path)
 		return HealthCheckResponse{}, err
 	}
@@ -229,10 +214,11 @@ func (w *PaymentProcessor) retrieveHealth(path string) (HealthCheckResponse, err
 }
 
 func (w *PaymentProcessor) StartWorkers(ctx context.Context) {
-	for range w.workers {
+	for range w.cfg.NumWorkers {
 		go w.run(ctx)
 	}
 
+	// Pull from redis the latest health check status
 	go func() {
 		ticker := time.NewTicker(HealthCheckTicker)
 		defer ticker.Stop()
@@ -260,7 +246,7 @@ func (w *PaymentProcessor) StartWorkers(ctx context.Context) {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			len, err := w.redis.LLen(context.Background(), PaymentProcessingQueue).Result()
+			len, err := w.redisClient.LLen(context.Background(), PaymentProcessingQueue).Result()
 			if err != nil {
 				slog.Error("failed to get the length of the queue", "err", err)
 				continue
@@ -277,10 +263,10 @@ func (w *PaymentProcessor) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			raw, err := w.redis.LPop(ctx, PaymentProcessingQueue).Bytes()
+			raw, err := w.redisClient.LPop(ctx, PaymentProcessingQueue).Bytes()
 			if err != nil {
 				slog.Debug("failed to pop the payment from the queue", "error", err)
-				time.Sleep(BackoffTimeEmptyQueue) // add delay when queue is empty
+				time.Sleep(BackoffTimeEmptyQueue)
 				continue
 			}
 
@@ -291,14 +277,14 @@ func (w *PaymentProcessor) run(ctx context.Context) {
 			}
 
 			if err := w.innerProcess(payment); err != nil {
-				w.redis.LPush(ctx, PaymentProcessingQueue, raw)
+				w.redisClient.LPush(ctx, PaymentProcessingQueue, raw)
 			}
 		}
 	}
 }
 
 func (w *PaymentProcessor) syncHealthStatus(key string) error {
-	resBody, err := w.redis.Get(context.Background(), key).Result()
+	resBody, err := w.redisClient.Get(context.Background(), key).Result()
 	if err != nil {
 		slog.Debug("failed to get the health check", "err", err)
 		return err

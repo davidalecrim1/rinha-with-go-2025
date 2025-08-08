@@ -6,7 +6,6 @@ require (
 	github.com/bytedance/sonic v1.13.3
 	github.com/gofiber/fiber/v2 v2.52.8
 	github.com/redis/go-redis/v9 v9.11.0
-	github.com/valyala/fasthttp v1.58.0
 )
 
 require (
@@ -24,6 +23,7 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.58.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/sys v0.28.0 // indirect

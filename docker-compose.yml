@@ -15,10 +15,10 @@ services:
     <<: *go-backend
     container_name: go-backend-1
     environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
-      - REDIS_ADDR=redis-db:6379
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - ENABLE_PROFILING=false
+      - REDIS_ADDR=redis-db:6379
       - UNIX_SOCKET=/var/run/api_1.sock
     networks:
       - app
@@ -33,14 +33,11 @@ services:
     <<: *go-backend
     container_name: go-backend-2
     environment:
-    - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
-    - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
-    - REDIS_ADDR=redis-db:6379
-    - MONITOR_HEALTH=false
-    - ENABLE_PROFILING=false
-    - WORKERS=20
-    - RETRY_QUEUE_SIZE=6000
-    - UNIX_SOCKET=/var/run/api_2.sock
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
+      - ENABLE_PROFILING=false
+      - REDIS_ADDR=redis-db:6379
+      - UNIX_SOCKET=/var/run/api_2.sock
     networks:
       - app
       - payment-processor
@@ -62,11 +59,11 @@ services:
       - go-backend-1
       - go-backend-2
     environment:
-      - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
-      - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
-      - REDIS_ADDR=redis-db:6379
+      - PAYMENT_PROCESSOR_URL_DEFAULT=http://payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=http://payment-processor-fallback:8080
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
+      - REDIS_ADDR=redis-db:6379
       - WORKERS=50
     deploy:
       resources:
@@ -81,11 +78,6 @@ services:
     networks:
       - app
       - payment-processor
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     ports:
       - "6379:6379"
     deploy:
@@ -99,7 +91,7 @@ services:
     image: nginx:1.29-alpine
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - api-sockets:/var/run:rw 
+      - api-sockets:/var/run:rw
     depends_on:
       - go-backend-1
       - go-backend-2

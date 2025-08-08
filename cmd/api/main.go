@@ -13,7 +13,6 @@ import (
 
 	"rinha-with-go-2025/internal"
 	"rinha-with-go-2025/pkg/profiling"
-	"rinha-with-go-2025/pkg/utils"
 
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/fiber/v2"
@@ -24,18 +23,37 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	shouldProfile := utils.GetEnvOrSetDefault("ENABLE_PROFILING", "false")
-	if shouldProfile == "true" {
-		profiling.EnableProfiling(time.Minute * 2)
+	cfg := internal.NewConfig()
+	cfg.Load()
+
+	slog.SetLogLoggerLevel(cfg.LogLevel)
+
+	if cfg.EnableProfiling {
+		profiling.ProfileApplication(time.Minute * 2)
 	}
 
-	slog.SetLogLoggerLevel(slog.LevelInfo)
+	tr := &http.Transport{
+		MaxIdleConns:        30,
+		MaxIdleConnsPerHost: 15,
+		IdleConnTimeout:     120 * time.Second,
+		MaxConnsPerHost:     20,
+		DisableCompression:  true,
+		DisableKeepAlives:   false,
+		ForceAttemptHTTP2:   false,
 
-	httpClient := &http.Client{}
+		DialContext: (&net.Dialer{
+			Timeout:   1 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+	}
 
-	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
+	httpClient := &http.Client{
+		Transport: tr,
+	}
+
 	redisClient := redis.NewClient(&redis.Options{
-		Addr:     redisAddr,
+		Addr:     cfg.RedisAddr,
 		Password: "",
 		DB:       0,
 	})
@@ -44,14 +62,11 @@ func main() {
 	}
 
 	repo := internal.NewPaymentRepository(redisClient)
-	defaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
-	fallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
 	adapter := internal.NewPaymentAdapter(
 		httpClient,
 		redisClient,
 		repo,
-		defaultUrl,
-		fallbackUrl,
+		cfg,
 	)
 
 	handler := internal.NewPaymentHandler(adapter)
@@ -72,25 +87,24 @@ func main() {
 
 	handler.RegisterRoutes(app)
 
-	go func() {
-		<-ctx.Done()
-		app.Shutdown()
-	}()
-
-	socketPath := utils.GetEnvOrSetDefault("UNIX_SOCKET", "/var/run/api.sock")
-	if _, err := os.Stat(socketPath); err == nil {
-		os.Remove(socketPath)
+	if _, err := os.Stat(cfg.UnixSocketPath); err == nil {
+		os.Remove(cfg.UnixSocketPath)
 	}
 
-	listener, err := net.Listen("unix", socketPath)
+	listener, err := net.Listen("unix", cfg.UnixSocketPath)
 	if err != nil {
 		panic(fmt.Errorf("error listening on unix socket: %v", err))
 	}
 	defer listener.Close()
 
-	os.Chmod(socketPath, 0666)
+	os.Chmod(cfg.UnixSocketPath, 0o666)
 
-	slog.Info("starting app on unix socket", "socketPath", socketPath)
+	go func() {
+		<-ctx.Done()
+		app.Shutdown()
+	}()
+
+	slog.Info("starting app on unix socket", "socketPath", cfg.UnixSocketPath)
 	if err := app.Listener(listener); err != nil {
 		panic(fmt.Errorf("error starting Fiber app: %v", err))
 	}

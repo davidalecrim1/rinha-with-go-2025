@@ -28,15 +28,14 @@ func NewPaymentAdapter(
 	client *http.Client,
 	redis *redis.Client,
 	repo *PaymentRepository,
-	defaultUrl string,
-	fallbackUrl string,
+	cfg *Config,
 ) *PaymentAdapter {
 	return &PaymentAdapter{
 		client:      client,
 		redis:       redis,
 		repo:        repo,
-		defaultUrl:  defaultUrl,
-		fallbackUrl: fallbackUrl,
+		defaultUrl:  cfg.PaymentProcessorDefault,
+		fallbackUrl: cfg.PaymentProcessorFallback,
 	}
 }
 
