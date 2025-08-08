@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -75,10 +77,22 @@ func main() {
 		app.Shutdown()
 	}()
 
-	port := utils.GetEnvOrSetDefault("PORT", "9999")
-	err := app.Listen(":" + port)
+	socketPath := utils.GetEnvOrSetDefault("UNIX_SOCKET", "/var/run/api.sock")
+	if _, err := os.Stat(socketPath); err == nil {
+		os.Remove(socketPath)
+	}
+
+	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		panic(fmt.Errorf("failed to listen to port: %v", err))
+		panic(fmt.Errorf("error listening on unix socket: %v", err))
+	}
+	defer listener.Close()
+
+	os.Chmod(socketPath, 0666)
+
+	slog.Info("starting app on unix socket", "socketPath", socketPath)
+	if err := app.Listener(listener); err != nil {
+		panic(fmt.Errorf("error starting Fiber app: %v", err))
 	}
 }
 
