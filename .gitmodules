@@ -1,3 +1,6 @@
 [submodule "rinha-source"]
 	path = rinha-source
 	url = https://github.com/zanfranceschi/rinha-de-backend-2025
+[submodule "extreme"]
+	path = extreme
+	url = https://github.com/davidalecrim1/extreme
