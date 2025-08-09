@@ -21,8 +21,14 @@ run-one-instance-local:
 run-docker:
 	make run-processor && docker compose up --build -d
 
+run-amd64:
+	make run-processor-amd64 && docker compose up --build -d
+
 run-processor:
 	docker compose -f rinha-docker-compose-arm64.yml up -d
+
+run-processor-amd64:
+	docker compose -f rinha-docker-compose-amd64.yml up -d
 
 profiling-cpu:
 	pproftui ./docs/profiling/go-backend-1/cpu.prof
