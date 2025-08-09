@@ -1,5 +1,7 @@
 TS := $(shell date '+%Y%m%d_%H%M%S')
 EXPORT_FILE := reports/report_$(TS).html
+VERSION_API := v2.0.0-api
+VERSION_WORKER := v2.0.0-worker
 
 load-test:
 	K6_WEB_DASHBOARD=true \
@@ -48,12 +50,12 @@ push-image:
 build-for-amd64:
 	docker buildx build \
 	--platform linux/amd64 \
-	-t davidalecrim1/rinha-with-go-2025:v1.2.0-redis-extreme-api \
+	-t davidalecrim1/rinha-with-go-2025:$(VERSION_API) \
 	--push \
 	-f Dockerfile.api .
 
 	docker buildx build \
 	--platform linux/amd64 \
-	-t davidalecrim1/rinha-with-go-2025:v1.2.0-redis-extreme-worker \
+	-t davidalecrim1/rinha-with-go-2025:$(VERSION_WORKER) \
 	--push \
 	-f Dockerfile.worker .
