@@ -7,19 +7,19 @@ x-service-templates:
       - payment-processor
     depends_on:
       - redis
+    volumes:
+      - api-sockets:/var/run:rw
 
 services:
   go-backend-1:
     <<: *go-backend
     container_name: go-backend-1
-    ports:
-      - "9091:80"
     environment:
       - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
-      - PORT=80
-      - REDIS_ADDR=redis-db:6379
       - ENABLE_PROFILING=false
+      - REDIS_ADDR=/var/run/redis.sock
+      - UNIX_SOCKET=/var/run/api_1.sock
     networks:
       - app
       - payment-processor
@@ -32,14 +32,12 @@ services:
   go-backend-2:
     <<: *go-backend
     container_name: go-backend-2
-    ports:
-      - "9092:80"
     environment:
       - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
-      - PORT=80
-      - REDIS_ADDR=redis-db:6379
       - ENABLE_PROFILING=false
+      - REDIS_ADDR=/var/run/redis.sock
+      - UNIX_SOCKET=/var/run/api_2.sock
     networks:
       - app
       - payment-processor
@@ -60,13 +58,16 @@ services:
       - redis
       - go-backend-1
       - go-backend-2
+    volumes:
+      - api-sockets:/var/run:rw
     environment:
       - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
       - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
-      - REDIS_ADDR=redis-db:6379
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
-      - WORKERS=50
+      - REDIS_ADDR=/var/run/redis.sock
+      - WORKERS=10
+      - LENGTH_PROCESSOR_BUFFER=10000
     deploy:
       resources:
         limits:
@@ -74,14 +75,15 @@ services:
           memory: "100MB"
 
   redis:
-    image: redis:8.0-alpine
+    image: redis:8.0
     container_name: redis-db
-    command: redis-server --save "" --appendonly no --maxclients 20000
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis.conf
+      - api-sockets:/var/run:rw
+    command: bash -c "rm -rf /var/run/redis.sock && redis-server /usr/local/etc/redis.conf"
     networks:
       - app
       - payment-processor
-    ports:
-      - "6379:6379"
     deploy:
       resources:
         limits:
@@ -90,8 +92,9 @@ services:
 
   load-balancer:
     container_name: load-balancer-extreme-proxy
-    image: davidalecrim1/extreme-proxy:v0.6.14
+    image: davidalecrim1/extreme-proxy:v1.0.0
     volumes:
+      - api-sockets:/var/run:rw
       - ./config.yaml:/app/config.yaml:ro
     depends_on:
       - go-backend-1
@@ -111,3 +114,6 @@ networks:
     driver: bridge
   payment-processor:
     external: true
+
+volumes:
+  api-sockets:

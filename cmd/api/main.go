@@ -4,36 +4,58 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"rinha-with-go-2025/internal"
 	"rinha-with-go-2025/pkg/profiling"
-	"rinha-with-go-2025/pkg/utils"
 
-	"github.com/bytedance/sonic"
-	"github.com/gofiber/fiber/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/valyala/fasthttp"
 )
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	shouldProfile := utils.GetEnvOrSetDefault("ENABLE_PROFILING", "false")
-	if shouldProfile == "true" {
-		profiling.EnableProfiling(time.Minute * 2)
+	cfg := internal.NewConfig()
+	cfg.Load()
+
+	slog.SetLogLoggerLevel(cfg.LogLevel)
+
+	if cfg.EnableProfiling {
+		profiling.ProfileApplication(time.Minute * 2)
 	}
 
-	slog.SetLogLoggerLevel(slog.LevelInfo)
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			MaxConnsPerHost:     100,
 
-	httpClient := &http.Client{}
+			IdleConnTimeout:       30 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
 
-	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
+			DisableCompression: true,
+			DisableKeepAlives:  false,
+			ForceAttemptHTTP2:  false,
+
+			DialContext: (&net.Dialer{
+				Timeout:   100 * time.Millisecond,
+				KeepAlive: 90 * time.Second,
+				DualStack: true,
+			}).DialContext,
+		},
+	}
+
 	redisClient := redis.NewClient(&redis.Options{
-		Addr:     redisAddr,
+		Network:  "unix",
+		Addr:     cfg.RedisAddr,
 		Password: "",
 		DB:       0,
 	})
@@ -42,50 +64,33 @@ func main() {
 	}
 
 	repo := internal.NewPaymentRepository(redisClient)
-	defaultUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_DEFAULT", "http://localhost:8001")
-	fallbackUrl := utils.GetEnvOrSetDefault("PAYMENT_PROCESSOR_URL_FALLBACK", "http://localhost:8002")
 	adapter := internal.NewPaymentAdapter(
 		httpClient,
 		redisClient,
 		repo,
-		defaultUrl,
-		fallbackUrl,
+		cfg,
 	)
 
 	handler := internal.NewPaymentHandler(adapter)
-	app := fiber.New(fiber.Config{
-		JSONEncoder: sonicMarshal,
-		JSONDecoder: sonicUnmarshal,
+	if _, err := os.Stat(cfg.UnixSocketPath); err == nil {
+		os.Remove(cfg.UnixSocketPath)
+	}
 
-		Prefork:                   false,
-		CaseSensitive:             true,
-		StrictRouting:             false,
-		ServerHeader:              "",
-		AppName:                   "",
-		DisableDefaultDate:        true,
-		DisableDefaultContentType: true,
-		DisableHeaderNormalizing:  true,
-		DisableStartupMessage:     true,
-	})
+	listener, err := net.Listen("unix", cfg.UnixSocketPath)
+	if err != nil {
+		panic(fmt.Errorf("error listening on unix socket: %v", err))
+	}
+	defer listener.Close()
 
-	handler.RegisterRoutes(app)
+	os.Chmod(cfg.UnixSocketPath, 0o666)
 
 	go func() {
 		<-ctx.Done()
-		app.Shutdown()
+		listener.Close()
 	}()
 
-	port := utils.GetEnvOrSetDefault("PORT", "9999")
-	err := app.Listen(":" + port)
-	if err != nil {
-		panic(fmt.Errorf("failed to listen to port: %v", err))
+	slog.Info("starting app on unix socket", "socketPath", cfg.UnixSocketPath)
+	if err := fasthttp.Serve(listener, handler.Router); err != nil {
+		panic(fmt.Errorf("error starting fasthttp server: %v", err))
 	}
-}
-
-func sonicMarshal(v any) ([]byte, error) {
-	return sonic.ConfigFastest.Marshal(v)
-}
-
-func sonicUnmarshal(data []byte, v any) error {
-	return sonic.ConfigFastest.Unmarshal(data, v)
 }

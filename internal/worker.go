@@ -30,15 +30,15 @@ type PaymentProcessor struct {
 	repo                 *PaymentRepository
 	healthStatusDefault  atomic.Value
 	healthStatusFallback atomic.Value
-	workers              int
+	cfg                  *Config
 }
 
-func NewPaymentProcessor(redis *redis.Client, client *fasthttp.HostClient, repo *PaymentRepository, workers int) *PaymentProcessor {
+func NewPaymentProcessor(redis *redis.Client, client *fasthttp.HostClient, repo *PaymentRepository, cfg *Config) *PaymentProcessor {
 	w := &PaymentProcessor{
-		redis:   redis,
-		client:  client,
-		repo:    repo,
-		workers: workers,
+		redis:  redis,
+		client: client,
+		repo:   repo,
+		cfg:    cfg,
 	}
 
 	w.healthStatusDefault.Store(HealthCheckResponse{
@@ -122,7 +122,7 @@ func (w *PaymentProcessor) sendPayment(
 		return ErrUnavailableProcessor
 	}
 
-	//start2 := time.Now()
+	// start2 := time.Now()
 	err = w.repo.Add(PaymentProcessed{
 		PaymentRequestProcessor: payment,
 		Processed:               endpoint,
@@ -224,7 +224,7 @@ func (w *PaymentProcessor) retrieveHealth(path string) (HealthCheckResponse, err
 }
 
 func (w *PaymentProcessor) StartWorkers(ctx context.Context) {
-	for range w.workers {
+	for range w.cfg.NumWorkers {
 		go w.run(ctx)
 	}
 

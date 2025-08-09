@@ -1,5 +1,7 @@
 TS := $(shell date '+%Y%m%d_%H%M%S')
 EXPORT_FILE := reports/report_$(TS).html
+VERSION_API := v2.0.0-api-extreme
+VERSION_WORKER := v2.0.0-worker-extreme
 
 load-test:
 	K6_WEB_DASHBOARD=true \
@@ -21,8 +23,14 @@ run-one-instance-local:
 run-docker:
 	make run-processor && docker compose up --build -d
 
+run-amd64:
+	make run-processor-amd64 && docker compose up --build -d
+
 run-processor:
 	docker compose -f rinha-docker-compose-arm64.yml up -d
+
+run-processor-amd64:
+	docker compose -f rinha-docker-compose-amd64.yml up -d
 
 profiling-cpu:
 	pproftui ./docs/profiling/go-backend-1/cpu.prof
@@ -42,12 +50,12 @@ push-image:
 build-for-amd64:
 	docker buildx build \
 	--platform linux/amd64 \
-	-t davidalecrim1/rinha-with-go-2025:v1.3.0-redis-extreme-api \
+	-t davidalecrim1/rinha-with-go-2025:$(VERSION_API) \
 	--push \
 	-f Dockerfile.api .
 
 	docker buildx build \
 	--platform linux/amd64 \
-	-t davidalecrim1/rinha-with-go-2025:v1.3.0-redis-extreme-worker \
+	-t davidalecrim1/rinha-with-go-2025:$(VERSION_WORKER) \
 	--push \
 	-f Dockerfile.worker .

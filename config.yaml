@@ -3,34 +3,13 @@
 # Server settings
 server:
   listen_address: ":9999"
-  read_timeout: "2s"      
-  write_timeout: "2s"
-  max_connections_per_ip: 2000
-  concurrency: 1000
 
-# Keep-alive settings
-# - enabled and client_timeout control TCP keep-alive for incoming connections
-# - backend_timeout controls idle timeout for backend connections
-keep_alive:
-  enabled: true
-  client_timeout: "30s"
-  backend_timeout: "30s"
-  max_requests_per_conn: 1000
-
-# Backend servers to forward requests to
+# Backend servers to connect using unix sockets
 backends:
-  - "http://go-backend-1:80"
-  - "http://go-backend-2:80"
-
-# Connection pool settings for backend connections
-connection_pool:
-  max_conns_per_host: 2000
+  - /var/run/api_1.sock
+  - /var/run/api_2.sock
 
 # Logging configuration
 logging:
   enabled: true
-  level: "info"  # debug, info, warn, error
-
-pre_warm:
-  enabled: true
-  requests_per_backend: 500
+  level: "info" # debug, info, warn, error

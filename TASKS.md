@@ -1,0 +1,4 @@
+- [x] Change to unix sockets between nginx and the api.
+- [ ] Change fiber to fasthttp.
+- [ ] Remove redis and use in memory database.
+- [ ] Migrate from fasthttp to net/http when calling the API.

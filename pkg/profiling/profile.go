@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func EnableProfiling(stopTime time.Duration) {
+func ProfileApplication(stopTime time.Duration) {
 	slog.Info("profiling enabled")
 
 	err := os.Mkdir("prof", 0o755)

@@ -1,9 +1,8 @@
 package internal
 
 import (
-	"net/http"
-
-	"github.com/gofiber/fiber/v2"
+	"github.com/bytedance/sonic"
+	"github.com/valyala/fasthttp"
 )
 
 type PaymentHandler struct {
@@ -16,42 +15,72 @@ func NewPaymentHandler(adapter *PaymentAdapter) *PaymentHandler {
 	}
 }
 
-func (h *PaymentHandler) RegisterRoutes(app *fiber.App) {
-	app.Post("/payments", h.Process)
-	app.Get("/payments-summary", h.Summary)
-	app.Post("/purge-payments", h.Purge)
+func (h *PaymentHandler) Router(ctx *fasthttp.RequestCtx) {
+	switch string(ctx.Path()) {
+	case "/payments":
+		if ctx.IsPost() {
+			h.Process(ctx)
+		} else {
+			ctx.SetStatusCode(fasthttp.StatusMethodNotAllowed)
+		}
+	case "/payments-summary":
+		if ctx.IsGet() {
+			h.Summary(ctx)
+		} else {
+			ctx.SetStatusCode(fasthttp.StatusMethodNotAllowed)
+		}
+	case "/purge-payments":
+		if ctx.IsPost() {
+			h.Purge(ctx)
+		} else {
+			ctx.SetStatusCode(fasthttp.StatusMethodNotAllowed)
+		}
+
+	default:
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+	}
 }
 
-func (h *PaymentHandler) Process(c *fiber.Ctx) error {
-	body := c.BodyRaw()
+func (h *PaymentHandler) Process(ctx *fasthttp.RequestCtx) {
+	body := ctx.PostBody()
 	go func() {
 		h.adapter.Process(body)
 	}()
-	return c.SendStatus(http.StatusAccepted)
+	ctx.SetStatusCode(fasthttp.StatusAccepted)
 }
 
-func (h *PaymentHandler) Summary(c *fiber.Ctx) error {
-	fromStr := c.Query("from")
-	toStr := c.Query("to")
+func (h *PaymentHandler) Summary(ctx *fasthttp.RequestCtx) {
+	fromStr := ctx.QueryArgs().Peek("from")
+	toStr := ctx.QueryArgs().Peek("to")
 
-	summary, err := h.adapter.Summary(fromStr, toStr)
+	summary, err := h.adapter.Summary(string(fromStr), string(toStr))
 	if err != nil {
-		return c.SendStatus(http.StatusInternalServerError)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		return
 	}
 
-	return c.JSON(summary)
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.SetContentType("application/json")
+	body, err := sonic.Marshal(summary)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		return
+	}
+
+	ctx.SetBody(body)
 }
 
-func (h *PaymentHandler) Purge(c *fiber.Ctx) error {
-	tokenStr := c.Get("X-Rinha-Token")
+func (h *PaymentHandler) Purge(ctx *fasthttp.RequestCtx) {
+	tokenStr := string(ctx.Request.Header.Peek("X-Rinha-Token"))
 
 	if tokenStr == "" {
 		tokenStr = "123"
 	}
 
 	if err := h.adapter.Purge(tokenStr); err != nil {
-		return c.SendStatus(http.StatusInternalServerError)
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		return
 	}
 
-	return c.SendStatus(http.StatusOK)
+	ctx.SetStatusCode(fasthttp.StatusOK)
 }
