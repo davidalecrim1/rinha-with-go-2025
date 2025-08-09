@@ -178,12 +178,12 @@
 
 # v2.0.0 (Unix Sockets)
 
-**Commit:** 
+**Commit:** c40ddd595b3ee68f98d8533aa49d7cdadbc778c1
 **Load Test Commit Version**: 88db512e74d52cd6e1a0109dafcd435519fbc2b5
-**Load Test Result**:
+**Load Test Result**: report_20250809_081240.html
 
 **Changes**:
 - Change the API to use unix sockets instead of network ports.
 - Added a new global configuration manager to improve code structure.
 - Remove Fiber and add FastHTTP as the server.
-- Refactor and rework a bunch of things to improve performance. None got me under 6ms.
+- Refactor and rework a bunch of things to improve performance. None got me under 6ms. I tested some other versions from people of rinha and my conclusion is that this is a limitation on MacOS.
