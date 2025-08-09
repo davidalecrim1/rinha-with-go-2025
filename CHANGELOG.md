@@ -174,3 +174,16 @@
 
 **Changes**:
 - Add a SortedSet instead of Hashmap to reduce the p99 from /Summary endpoint.
+
+
+# v2.0.0 (Unix Sockets)
+
+**Commit:** 
+**Load Test Commit Version**: 88db512e74d52cd6e1a0109dafcd435519fbc2b5
+**Load Test Result**:
+
+**Changes**:
+- Change the API to use unix sockets instead of network ports.
+- Added a new global configuration manager to improve code structure.
+- Remove Fiber and add FastHTTP as the server.
+- Refactor and rework a bunch of things to improve performance. None got me under 6ms.
