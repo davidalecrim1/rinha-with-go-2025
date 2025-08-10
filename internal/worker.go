@@ -23,6 +23,8 @@ const (
 	HealthCheckTicker         = 5 * time.Second
 	BackoffTimeEmptyQueue     = 100 * time.Millisecond
 	MinAcceptableResponseTime = 200 // in milliseconds
+	MinJitterBetweenPayments  = 20  // in milliseconds
+	MaxJitterBetweenPayments  = 40  // in milliseconds
 )
 
 type PaymentProcessor struct {
@@ -280,9 +282,7 @@ func (w *PaymentProcessor) run(ctx context.Context) {
 				continue
 			}
 
-			// TODO: Validate if this jitter is the best way for this version.
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(20)+20))
-			// at least 20ms and at most 40ms
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(MaxJitterBetweenPayments-MinJitterBetweenPayments)+MinJitterBetweenPayments))
 
 			var payment PaymentRequestProcessor
 			if err := sonic.ConfigFastest.Unmarshal(raw, &payment); err != nil {
