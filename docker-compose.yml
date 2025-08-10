@@ -66,7 +66,7 @@ services:
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
       - REDIS_ADDR=/var/run/redis.sock
-      - WORKERS=10
+      - WORKERS=25
       - LENGTH_PROCESSOR_BUFFER=10000
     deploy:
       resources:

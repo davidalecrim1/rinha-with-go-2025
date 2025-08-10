@@ -44,7 +44,7 @@ func main() {
 			ForceAttemptHTTP2:  false,
 
 			DialContext: (&net.Dialer{
-				Timeout:   100 * time.Millisecond,
+				Timeout:   1 * time.Second,
 				KeepAlive: 90 * time.Second,
 				DualStack: true,
 			}).DialContext,
