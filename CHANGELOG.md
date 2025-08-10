@@ -184,6 +184,6 @@
 **Changes**:
 - This version uses extreme as the LB with unix sockets;
 - It has a jitter to avoid network overhead and send payments in different time ranges;
-- It has three instances to scale the socket connection;
+- It has four instances to scale the socket connection;
 - The best p99 is 9ms in my computer.
 - Fix the purge endpoint that wasn't working.
