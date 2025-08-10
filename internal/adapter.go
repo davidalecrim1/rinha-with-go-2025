@@ -54,13 +54,12 @@ func (a *PaymentAdapter) Purge(token string) error {
 	if err := a.repo.Purge(); err != nil {
 		return err
 	}
-	if err := a.purge(a.defaultUrl+"/admin/purge-payments", token); err != nil {
+	if err := a.purge("http://"+a.defaultUrl+"/admin/purge-payments", token); err != nil {
 		return err
 	}
-	if err := a.purge(a.fallbackUrl+"/admin/purge-payments", token); err != nil {
+	if err := a.purge("http://"+a.fallbackUrl+"/admin/purge-payments", token); err != nil {
 		return err
 	}
-
 	if err := a.redis.FlushAll(context.Background()).Err(); err != nil {
 		return err
 	}
