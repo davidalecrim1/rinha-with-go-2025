@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -278,6 +279,10 @@ func (w *PaymentProcessor) run(ctx context.Context) {
 				time.Sleep(BackoffTimeEmptyQueue) // add delay when queue is empty
 				continue
 			}
+
+			// TODO: Validate if this jitter is the best way for this version.
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(20)+20))
+			// at least 20ms and at most 40ms
 
 			var payment PaymentRequestProcessor
 			if err := sonic.ConfigFastest.Unmarshal(raw, &payment); err != nil {
