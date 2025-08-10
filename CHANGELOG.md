@@ -174,3 +174,16 @@
 
 **Changes**:
 - Add a SortedSet instead of Hashmap to reduce the p99 from /Summary endpoint.
+
+# v2.0.0 (Unix Socket Extreme)
+
+**Commit:** 6219c44831c696f210fd2f7296f0544e767be24e
+**Load Test Commit Version**: 0d902eb25bc430c015fd3b0956fcba4385957c75
+**Load Test Result**: report_20250810_073152.html
+
+**Changes**:
+- This version uses extreme as the LB with unix sockets;
+- It has a jitter to avoid network overhead and send payments in different time ranges;
+- It has three instances to scale the socket connection;
+- The best p99 is 9ms in my computer.
+- Fix the purge endpoint that wasn't working.
