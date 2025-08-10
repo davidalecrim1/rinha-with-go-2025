@@ -26,8 +26,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: "50MB"
+          cpus: "0.15"
+          memory: "35MB"
 
   go-backend-2:
     <<: *go-backend
@@ -44,8 +44,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: "50MB"
+          cpus: "0.15"
+          memory: "35MB"
 
   go-backend-3:
     <<: *go-backend
@@ -62,8 +62,26 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.250"
-          memory: "50MB"
+          cpus: "0.15"
+          memory: "35MB"
+
+  go-backend-4:
+    <<: *go-backend
+    container_name: go-backend-4
+    environment:
+      - PAYMENT_PROCESSOR_URL_DEFAULT=payment-processor-default:8080
+      - PAYMENT_PROCESSOR_URL_FALLBACK=payment-processor-fallback:8080
+      - ENABLE_PROFILING=false
+      - REDIS_ADDR=/var/run/redis.sock
+      - UNIX_SOCKET=/var/run/api_4.sock
+    networks:
+      - app
+      - payment-processor
+    deploy:
+      resources:
+        limits:
+          cpus: "0.15"
+          memory: "35MB"
 
   go-worker-1:
     build:
@@ -105,8 +123,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.150"
-          memory: "50MB"
+          cpus: "0.2"
+          memory: "60MB"
 
   load-balancer:
     container_name: load-balancer-extreme-proxy
@@ -124,7 +142,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
+          cpus: "0.3"
           memory: "50MB"
 
 networks:
