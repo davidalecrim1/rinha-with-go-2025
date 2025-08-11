@@ -111,6 +111,7 @@ func (w *PaymentProcessor) sendPayment(
 		return ErrUnavailableProcessor
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		slog.Error("failed to process the request", "err", err, "res", res)
 		return ErrUnavailableProcessor
 	}
 	if res.StatusCode == 422 {
