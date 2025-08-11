@@ -187,3 +187,14 @@
 - It has four instances to scale the socket connection;
 - The best p99 is 9ms in my computer;
 - Fix the purge endpoint that wasn't working.
+
+# v2.0.1 (Unix Socket Extreme)
+
+**Commit:** b729027224756610e2346a450b6fc819daec8e74
+**Load Test Commit Version**: 0d902eb25bc430c015fd3b0956fcba4385957c75
+**Load Test Result**:
+
+**Changes**:
+- Fix inconsistency bug with `less than` instead of `less than or equal` in the sorted set.
+- Solve the other inconsistencies with a shorter health check.
+- Fine tune the workers configuration for this version.
