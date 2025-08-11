@@ -21,11 +21,11 @@ const (
 const (
 	HealthCheckKeyDefault     = "health-check:default"
 	HealthCheckKeyFallback    = "health-check:fallback"
-	HealthCheckTicker         = 5 * time.Second
+	HealthCheckTicker         = 1 * time.Second
 	BackoffTimeEmptyQueue     = 100 * time.Millisecond
 	MinAcceptableResponseTime = 200 // in milliseconds
-	MinJitterBetweenPayments  = 20  // in milliseconds
-	MaxJitterBetweenPayments  = 40  // in milliseconds
+	MinJitterBetweenPayments  = 10  // in milliseconds
+	MaxJitterBetweenPayments  = 20  // in milliseconds
 )
 
 type PaymentProcessor struct {

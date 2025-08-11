@@ -35,7 +35,7 @@ func main() {
 			MaxIdleConnsPerHost: 100,
 			MaxConnsPerHost:     100,
 
-			IdleConnTimeout:       30 * time.Second,
+			IdleConnTimeout:       60 * time.Second,
 			ResponseHeaderTimeout: 5 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 
@@ -44,7 +44,6 @@ func main() {
 			ForceAttemptHTTP2:  false,
 
 			DialContext: (&net.Dialer{
-				Timeout:   1 * time.Second,
 				KeepAlive: 90 * time.Second,
 				DualStack: true,
 			}).DialContext,
