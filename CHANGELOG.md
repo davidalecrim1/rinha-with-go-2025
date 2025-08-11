@@ -208,3 +208,13 @@
 **Changes**:
 - Fix inconsistencies problem given the `less than or equal` to now only as `less than` in redis sorted set.
 - Tune workers to a larger length that seems to process things faster.
+
+# v2.0.3 (Unix Sockets)
+
+**Commit:** 2df9e87f5f557a420a1079a5134dd74214a717f6
+**Load Test Commit Version**: 88db512e74d52cd6e1a0109dafcd435519fbc2b5
+**Load Test Result**: report_20250811_155904.html
+
+**Changes**:
+- Tune workers to a larger length that seems to process things faster.
+- Reduce the health check to one second to avoid inconsistencies.
