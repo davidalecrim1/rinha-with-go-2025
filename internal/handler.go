@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"log/slog"
+
 	"github.com/bytedance/sonic"
 	"github.com/valyala/fasthttp"
 )
@@ -73,14 +75,15 @@ func (h *PaymentHandler) Summary(ctx *fasthttp.RequestCtx) {
 func (h *PaymentHandler) Purge(ctx *fasthttp.RequestCtx) {
 	tokenStr := string(ctx.Request.Header.Peek("X-Rinha-Token"))
 
-	if tokenStr == "" {
-		tokenStr = "123"
-	}
+	go func() {
+		if tokenStr == "" {
+			tokenStr = "123"
+		}
 
-	if err := h.adapter.Purge(tokenStr); err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		return
-	}
+		if err := h.adapter.Purge(tokenStr); err != nil {
+			slog.Error("failed to purge payments", "error", err)
+		}
+	}()
 
 	ctx.SetStatusCode(fasthttp.StatusOK)
 }
