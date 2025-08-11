@@ -95,7 +95,7 @@ func (r *PaymentRepository) calculateSummary(key string, from, to time.Time, fil
 	if filterByTime {
 		opt := &redis.ZRangeBy{
 			Min: fmt.Sprintf("%d", from.UnixMilli()),
-			Max: fmt.Sprintf("%d", to.UnixMilli()),
+			Max: fmt.Sprintf("%d", to.UnixMilli()-1), // -1 because needs to be less than, not equal
 		}
 		payments, err = r.db.ZRangeByScore(r.ctx, key, opt).Result()
 	} else {

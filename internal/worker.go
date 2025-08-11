@@ -20,7 +20,7 @@ const (
 const (
 	HealthCheckKeyDefault     = "health-check:default"
 	HealthCheckKeyFallback    = "health-check:fallback"
-	HealthCheckTicker         = 5 * time.Second
+	HealthCheckTicker         = 1 * time.Second
 	BackoffTimeEmptyQueue     = 100 * time.Millisecond
 	MinAcceptableResponseTime = 200 // in milliseconds
 	MinJitterBetweenPayments  = 20  // in milliseconds
