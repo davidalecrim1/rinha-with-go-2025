@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -23,6 +24,8 @@ const (
 	HealthCheckTicker         = 5 * time.Second
 	BackoffTimeEmptyQueue     = 100 * time.Millisecond
 	MinAcceptableResponseTime = 200 // in milliseconds
+	MinJitterBetweenPayments  = 20  // in milliseconds
+	MaxJitterBetweenPayments  = 40  // in milliseconds
 )
 
 type PaymentProcessor struct {
@@ -32,16 +35,14 @@ type PaymentProcessor struct {
 	healthStatusDefault  atomic.Value
 	healthStatusFallback atomic.Value
 	cfg                  *Config
-	inMemoryBuffer       chan PaymentRequestProcessor
 }
 
 func NewPaymentProcessor(redis *redis.Client, httpClient *http.Client, repo *PaymentRepository, cfg *Config) *PaymentProcessor {
 	w := &PaymentProcessor{
-		redisClient:    redis,
-		httpClient:     httpClient,
-		repo:           repo,
-		cfg:            cfg,
-		inMemoryBuffer: make(chan PaymentRequestProcessor, cfg.LengthProcessorBuffer),
+		redisClient: redis,
+		httpClient:  httpClient,
+		repo:        repo,
+		cfg:         cfg,
 	}
 
 	w.healthStatusDefault.Store(HealthCheckResponse{
@@ -220,33 +221,6 @@ func (w *PaymentProcessor) StartWorkers(ctx context.Context) {
 		go w.run(ctx)
 	}
 
-	// Pull from redis the payments and buffer in memory
-	// Created because I had a lag when using only redis.
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				raw, err := w.redisClient.LPop(ctx, PaymentProcessingQueue).Bytes()
-				if err != nil {
-					slog.Debug("failed to pop the payment from the queue", "error", err)
-					time.Sleep(BackoffTimeEmptyQueue)
-					continue
-				}
-
-				var payment PaymentRequestProcessor
-				if err := sonic.ConfigFastest.Unmarshal(raw, &payment); err != nil {
-					slog.Info("failed to unmarshal the payment", "error", err, "raw", string(raw))
-					continue
-				}
-
-				w.inMemoryBuffer <- payment
-			}
-		}
-	}()
-	// }
-
 	// Pull from redis the latest health check status
 	go func() {
 		ticker := time.NewTicker(HealthCheckTicker)
@@ -282,7 +256,7 @@ func (w *PaymentProcessor) StartWorkers(ctx context.Context) {
 				continue
 			}
 
-			slog.Info("length of the queues", "redisQueueLength", redisQueueLength, "workerBufferLength", len(w.inMemoryBuffer))
+			slog.Info("length of the queue", "redisQueueLength", redisQueueLength)
 		}
 	}()
 }
@@ -292,9 +266,24 @@ func (w *PaymentProcessor) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case raw := <-w.inMemoryBuffer:
-			if err := w.innerProcess(raw); err != nil {
-				w.inMemoryBuffer <- raw
+		default:
+			raw, err := w.redisClient.LPop(ctx, PaymentProcessingQueue).Bytes()
+			if err != nil {
+				slog.Debug("failed to pop the payment from the queue", "error", err)
+				time.Sleep(BackoffTimeEmptyQueue) // add delay when queue is empty
+				continue
+			}
+
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(MaxJitterBetweenPayments-MinJitterBetweenPayments)+MinJitterBetweenPayments))
+
+			var payment PaymentRequestProcessor
+			if err := sonic.ConfigFastest.Unmarshal(raw, &payment); err != nil {
+				slog.Info("failed to unmarshal the payment", "error", err, "raw", string(raw))
+				continue
+			}
+
+			if err := w.innerProcess(payment); err != nil {
+				w.redisClient.LPush(ctx, PaymentProcessingQueue, raw)
 			}
 		}
 	}
