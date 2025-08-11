@@ -188,7 +188,6 @@
 - Remove Fiber and add FastHTTP as the server.
 - Refactor and rework a bunch of things to improve performance. None got me under 6ms. I tested some other versions from people of rinha and my conclusion is that this is a limitation on MacOS.
 
-
 # v2.0.1 (Unix Sockets)
 
 **Commit:** 86c4a2310150b68660f72c04646e42372dd9bd37
@@ -199,3 +198,13 @@
 - Increase the amount of workers because of the lag registered in the server of rinha.
 - There this version was registered with 2ms. But locally I won't be able to replicate it.
 - Fix the amount of dial time of the TCP connection because that cause this version to lose some connections.
+
+# v2.0.2 (Unix Sockets)
+
+**Commit:** a1650194cc636c4222a27824917530693ee068ab
+**Load Test Commit Version**: 88db512e74d52cd6e1a0109dafcd435519fbc2b5
+**Load Test Result**: report_20250811_094541.html
+
+**Changes**:
+- Fix inconsistencies problem given the `less than or equal` to now only as `less than` in redis sorted set.
+- Tune workers to a larger length that seems to process things faster.
