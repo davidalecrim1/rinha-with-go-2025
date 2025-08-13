@@ -1,7 +1,7 @@
 TS := $(shell date '+%Y%m%d_%H%M%S')
 EXPORT_FILE := reports/report_$(TS).html
-VERSION_API := v2.0.1-api-extreme
-VERSION_WORKER := v2.0.1-worker-extreme
+VERSION_API := v3.0.0-api-extreme
+VERSION_WORKER := v3.0.0-worker-extreme
 
 load-test:
 	K6_WEB_DASHBOARD=true \
