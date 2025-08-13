@@ -172,3 +172,12 @@
 
 **Changes**:
 - Solve this version inconsistency. It was caused buy the filter LTE (less than or equal to) instead of LT (less than). Changing it to LT solved the issue.
+- 
+# v.0.11.1 (Async - MongoDB)
+
+**Commit:** 514b973c989b83a83ac1ba0f3ab0ed03da2c4f4d
+**Load Test Commit Version**: 80e9010cae555d60e3f45487404f47a8cb5f9bf5
+**Load Test Result**: N/A
+
+**Changes**:
+- The MongoDB was crashing for some reason on the latest version of the tests. I did some changes to help fix it.
