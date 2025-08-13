@@ -18,7 +18,10 @@ type Config struct {
 
 	NumWorkers int
 
-	UnixSocketPath string
+	UnixSocketPath        string
+	SummaryUnixSocketPath string
+
+	InitalDatabaseCap int
 }
 
 func NewConfig() *Config {
@@ -37,4 +40,7 @@ func (c *Config) Load() {
 	c.NumWorkers, _ = strconv.Atoi(utils.GetEnvOrSetDefault("WORKERS", "15"))
 
 	c.UnixSocketPath = utils.GetEnvOrSetDefault("UNIX_SOCKET", "/var/run/api.sock")
+	c.SummaryUnixSocketPath = utils.GetEnvOrSetDefault("SUMMARY_UNIX_SOCKET", "/var/run/summary.sock")
+
+	c.InitalDatabaseCap, _ = strconv.Atoi(utils.GetEnvOrSetDefault("INITAL_DATABASE_CAP", "10000"))
 }

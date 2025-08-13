@@ -17,11 +17,10 @@ var (
 )
 
 type PaymentAdapter struct {
-	client      *http.Client
-	redis       *redis.Client
-	repo        *PaymentRepository
-	defaultUrl  string
-	fallbackUrl string
+	client *http.Client
+	redis  *redis.Client
+	repo   *PaymentRepository
+	cfg    *Config
 }
 
 func NewPaymentAdapter(
@@ -31,11 +30,10 @@ func NewPaymentAdapter(
 	cfg *Config,
 ) *PaymentAdapter {
 	return &PaymentAdapter{
-		client:      client,
-		redis:       redis,
-		repo:        repo,
-		defaultUrl:  cfg.PaymentProcessorDefault,
-		fallbackUrl: cfg.PaymentProcessorFallback,
+		client: client,
+		redis:  redis,
+		repo:   repo,
+		cfg:    cfg,
 	}
 }
 
@@ -46,18 +44,11 @@ func (a *PaymentAdapter) Process(payment []byte) {
 	}
 }
 
-func (a *PaymentAdapter) Summary(from, to string) (SummaryResponse, error) {
-	return a.repo.Summary(from, to)
-}
-
 func (a *PaymentAdapter) Purge(token string) error {
-	if err := a.repo.Purge(); err != nil {
+	if err := a.purge("http://"+a.cfg.PaymentProcessorDefault+"/admin/purge-payments", token); err != nil {
 		return err
 	}
-	if err := a.purge("http://"+a.defaultUrl+"/admin/purge-payments", token); err != nil {
-		return err
-	}
-	if err := a.purge("http://"+a.fallbackUrl+"/admin/purge-payments", token); err != nil {
+	if err := a.purge("http://"+a.cfg.PaymentProcessorFallback+"/admin/purge-payments", token); err != nil {
 		return err
 	}
 	if err := a.redis.FlushAll(context.Background()).Err(); err != nil {

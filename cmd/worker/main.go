@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -48,7 +50,7 @@ func main() {
 		panic(fmt.Errorf("failed to connect to redis: %w", err))
 	}
 
-	repo := internal.NewPaymentRepository(redisClient)
+	repo := internal.NewPaymentRepository(cfg)
 	processor := internal.NewPaymentProcessor(
 		redisClient,
 		httpClient,
@@ -62,6 +64,27 @@ func main() {
 
 	processor.StartWorkers(ctx)
 
+	// unix socket server for the summary repository
+	if _, err := os.Stat(cfg.SummaryUnixSocketPath); err == nil {
+		os.Remove(cfg.SummaryUnixSocketPath)
+	}
+
+	listener, err := net.Listen("unix", cfg.SummaryUnixSocketPath)
+	if err != nil {
+		panic(fmt.Errorf("error listening on unix socket: %v", err))
+	}
+	defer listener.Close()
+
+	os.Chmod(cfg.SummaryUnixSocketPath, 0o666)
+
+	summaryHandler := internal.NewSummaryHandler(repo)
+	summaryServer := &fasthttp.Server{
+		Handler: summaryHandler.GetSummary,
+	}
+
+	go summaryServer.Serve(listener)
+
 	<-ctx.Done()
-	slog.Info("shutting down workers...")
+	slog.Info("shutting down workers and summary server...")
+	summaryServer.Shutdown()
 }

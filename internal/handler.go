@@ -8,12 +8,14 @@ import (
 )
 
 type PaymentHandler struct {
-	adapter *PaymentAdapter
+	adapter          *PaymentAdapter
+	unixSocketClient *fasthttp.HostClient
 }
 
-func NewPaymentHandler(adapter *PaymentAdapter) *PaymentHandler {
+func NewPaymentHandler(adapter *PaymentAdapter, unixSocketClient *fasthttp.HostClient) *PaymentHandler {
 	return &PaymentHandler{
-		adapter: adapter,
+		adapter:          adapter,
+		unixSocketClient: unixSocketClient,
 	}
 }
 
@@ -52,24 +54,14 @@ func (h *PaymentHandler) Process(ctx *fasthttp.RequestCtx) {
 }
 
 func (h *PaymentHandler) Summary(ctx *fasthttp.RequestCtx) {
-	fromStr := ctx.QueryArgs().Peek("from")
-	toStr := ctx.QueryArgs().Peek("to")
+	req := &ctx.Request
+	resp := &ctx.Response
 
-	summary, err := h.adapter.Summary(string(fromStr), string(toStr))
-	if err != nil {
+	if err := h.unixSocketClient.Do(req, resp); err != nil {
+		slog.Error("error forwarding request to summary repository", "error", err)
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		return
 	}
-
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	ctx.SetContentType("application/json")
-	body, err := sonic.Marshal(summary)
-	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		return
-	}
-
-	ctx.SetBody(body)
 }
 
 func (h *PaymentHandler) Purge(ctx *fasthttp.RequestCtx) {
@@ -86,4 +78,35 @@ func (h *PaymentHandler) Purge(ctx *fasthttp.RequestCtx) {
 	}()
 
 	ctx.SetStatusCode(fasthttp.StatusOK)
+}
+
+type SummaryHandler struct {
+	repo *PaymentRepository
+}
+
+func NewSummaryHandler(repo *PaymentRepository) *SummaryHandler {
+	return &SummaryHandler{repo: repo}
+}
+
+func (h *SummaryHandler) GetSummary(ctx *fasthttp.RequestCtx) {
+	from := ctx.QueryArgs().Peek("from")
+	to := ctx.QueryArgs().Peek("to")
+
+	summary, err := h.repo.Summary(string(from), string(to))
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		slog.Error("failed to get summary", "error", err)
+		return
+	}
+
+	body, err := sonic.ConfigFastest.Marshal(summary)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		slog.Error("failed to marshal summary", "error", err)
+		return
+	}
+
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.SetContentType("application/json")
+	ctx.SetBody(body)
 }

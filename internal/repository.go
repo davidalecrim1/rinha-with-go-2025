@@ -1,15 +1,10 @@
 package internal
 
 import (
-	"bytes"
-	"context"
-	"fmt"
 	"log/slog"
 	"math"
+	"sync"
 	"time"
-
-	"github.com/bytedance/sonic"
-	"github.com/redis/go-redis/v9"
 )
 
 var (
@@ -18,47 +13,25 @@ var (
 )
 
 type PaymentRepository struct {
-	ctx context.Context
-	db  *redis.Client
+	mu   sync.Mutex
+	data map[PaymentEndpoint][]PaymentProcessed
 }
 
-func NewPaymentRepository(db *redis.Client) *PaymentRepository {
+func NewPaymentRepository(cfg *Config) *PaymentRepository {
+	data := make(map[PaymentEndpoint][]PaymentProcessed)
+	data[PaymentEndpointDefault] = make([]PaymentProcessed, 0, cfg.InitalDatabaseCap)
+	data[PaymentEndpointFallback] = make([]PaymentProcessed, 0, cfg.InitalDatabaseCap)
+
 	return &PaymentRepository{
-		ctx: context.Background(),
-		db:  db,
+		mu:   sync.Mutex{},
+		data: data,
 	}
 }
 
 func (r *PaymentRepository) Add(payment PaymentProcessed) error {
-	raw, err := sonic.ConfigFastest.Marshal(payment)
-	if err != nil {
-		slog.Error("failed to marshal payment", "err", err)
-		return err
-	}
-
-	requestedAt, err := time.Parse(time.RFC3339Nano, *payment.RequestedAt)
-	if err != nil {
-		slog.Error("failed to parse requested at", "err", err)
-		return err
-	}
-
-	z := redis.Z{
-		Score:  float64(requestedAt.UnixMilli()),
-		Member: raw,
-	}
-
-	var key string
-	if payment.Processed == PaymentEndpointDefault {
-		key = PaymentDefaultSortedSet
-	} else {
-		key = PaymentFallbackSortedSet
-	}
-
-	if err := r.db.ZAdd(r.ctx, key, z).Err(); err != nil {
-		slog.Error("failed to save payment in redis sorted set", "err", err)
-		return err
-	}
-
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.data[payment.Processed] = append(r.data[payment.Processed], payment)
 	return nil
 }
 
@@ -81,39 +54,30 @@ func (r *PaymentRepository) Summary(fromStr, toStr string) (SummaryResponse, err
 	}
 
 	response := SummaryResponse{
-		DefaultSummary:  r.calculateSummary(PaymentDefaultSortedSet, from, to, filterByTime),
-		FallbackSummary: r.calculateSummary(PaymentFallbackSortedSet, from, to, filterByTime),
+		DefaultSummary:  r.calculateSummary(PaymentEndpointDefault, from, to, filterByTime),
+		FallbackSummary: r.calculateSummary(PaymentEndpointFallback, from, to, filterByTime),
 	}
 
 	return response, nil
 }
 
-func (r *PaymentRepository) calculateSummary(key string, from, to time.Time, filterByTime bool) SummaryTotalRequestsResponse {
-	var payments []string
-	var err error
-
-	if filterByTime {
-		opt := &redis.ZRangeBy{
-			Min: fmt.Sprintf("%d", from.UnixMilli()),
-			Max: fmt.Sprintf("%d", to.UnixMilli()-1), // -1 because needs to be less than, not equal
-		}
-		payments, err = r.db.ZRangeByScore(r.ctx, key, opt).Result()
-	} else {
-		payments, err = r.db.ZRange(r.ctx, key, 0, -1).Result()
-	}
-
-	if err != nil {
-		slog.Error("failed to get payments from redis sorted set", "err", err, "key", key)
-		return SummaryTotalRequestsResponse{}
-	}
-
+func (r *PaymentRepository) calculateSummary(endpoint PaymentEndpoint, from, to time.Time, filterByTime bool) SummaryTotalRequestsResponse {
 	summary := SummaryTotalRequestsResponse{}
-	for _, v := range payments {
-		var payment PaymentProcessed
-		decoder := sonic.ConfigFastest.NewDecoder(bytes.NewReader([]byte(v)))
-		if err := decoder.Decode(&payment); err != nil {
-			slog.Error("failed to process a payment", "err", err)
-			continue
+
+	r.mu.Lock()
+	data := r.data[endpoint]
+	r.mu.Unlock()
+
+	for _, payment := range data {
+		if filterByTime {
+			requestedAt := time.Time(payment.RequestedAt)
+
+			isBeforeFrom := requestedAt.Before(from) // strictly less than from
+			isOnOrAfterTo := !requestedAt.Before(to) // greater than or equal to to
+
+			if isBeforeFrom || isOnOrAfterTo {
+				continue
+			}
 		}
 		summary.TotalAmount += payment.Amount
 		summary.TotalRequests++
@@ -124,10 +88,8 @@ func (r *PaymentRepository) calculateSummary(key string, from, to time.Time, fil
 }
 
 func (r *PaymentRepository) Purge() error {
-	err := r.db.Del(r.ctx, PaymentDefaultSortedSet, PaymentFallbackSortedSet).Err()
-	if err != nil {
-		slog.Error("failed to delete payments sorted sets", "err", err)
-	}
-
-	return err
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.data = make(map[string][]PaymentProcessed)
+	return nil
 }

@@ -103,10 +103,11 @@ services:
       - ENABLE_PROFILING=false
       - REDIS_ADDR=/var/run/redis.sock
       - WORKERS=150
+      - SUMMARY_UNIX_SOCKET_PATH=/var/run/summary.sock
     deploy:
       resources:
         limits:
-          cpus: "0.4"
+          cpus: "0.5"
           memory: "100MB"
 
   redis:
@@ -122,12 +123,12 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
+          cpus: "0.1"
           memory: "60MB"
 
   load-balancer:
     container_name: load-balancer-extreme-proxy
-    image: davidalecrim1/extreme-proxy:v1.1.2
+    image: davidalecrim1/extreme-proxy:v1.1.3
     volumes:
       - api-sockets:/var/run:rw
       - ./config.yaml:/app/config.yaml:ro

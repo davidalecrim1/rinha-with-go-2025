@@ -63,7 +63,7 @@ func main() {
 		panic(fmt.Errorf("failed to connect to redis: %w", err))
 	}
 
-	repo := internal.NewPaymentRepository(redisClient)
+	repo := internal.NewPaymentRepository(cfg)
 	adapter := internal.NewPaymentAdapter(
 		httpClient,
 		redisClient,
@@ -71,7 +71,16 @@ func main() {
 		cfg,
 	)
 
-	handler := internal.NewPaymentHandler(adapter)
+	// unix socket client for the summary repository on the worker
+	unixSocketClient := &fasthttp.HostClient{
+		Addr: cfg.SummaryUnixSocketPath,
+		Dial: func(addr string) (net.Conn, error) {
+			return net.DialTimeout("unix", addr, 5*time.Second)
+		},
+	}
+	handler := internal.NewPaymentHandler(adapter, unixSocketClient)
+
+	// unix socker server for all handlers from the api
 	if _, err := os.Stat(cfg.UnixSocketPath); err == nil {
 		os.Remove(cfg.UnixSocketPath)
 	}
