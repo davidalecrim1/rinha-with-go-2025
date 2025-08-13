@@ -70,7 +70,7 @@ func (r *PaymentRepository) Add(payment PaymentRequestProcessor, endpoint Paymen
 	}
 	_, err = r.collection.InsertOne(context.Background(), doc)
 	if err != nil {
-		slog.Error("failed to save payment in redis hashmap", "err", err)
+		slog.Error("failed to save payment in mongodb", "err", err)
 	}
 	return err
 }

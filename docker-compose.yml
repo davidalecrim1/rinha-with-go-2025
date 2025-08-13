@@ -8,6 +8,7 @@ x-service-templates:
     depends_on:
       - redis
       - mongodb
+    restart: unless-stopped
 
 services:
   go-backend-1:
@@ -31,7 +32,7 @@ services:
       resources:
         limits:
           cpus: "0.4"
-          memory: "85MB"
+          memory: "65MB"
 
   go-backend-2:
     <<: *go-backend
@@ -54,7 +55,7 @@ services:
       resources:
         limits:
           cpus: "0.4"
-          memory: "85MB"
+          memory: "65MB"
 
   redis:
     image: redis:8.0-alpine
@@ -69,7 +70,7 @@ services:
       resources:
         limits:
           cpus: "0.1"
-          memory: "50MB"
+          memory: "30MB"
 
   mongodb:
     container_name: mongodb
@@ -79,11 +80,14 @@ services:
     networks:
       - app
       - payment-processor
+    volumes:
+      - ./mongod.conf:/etc/mongod.conf:ro
+    command: ["mongod", "--config", "/etc/mongod.conf"]
     deploy:
       resources:
         limits:
           cpus: "0.3"
-          memory: "100MB"
+          memory: "160MB"
 
   load-balancer:
     container_name: load-balancer-nginx

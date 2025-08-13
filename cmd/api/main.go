@@ -22,31 +22,28 @@ import (
 )
 
 func main() {
-	// TODO: Remove this after development.
 	slog.SetLogLoggerLevel(slog.LevelInfo)
 	ctx := context.Background()
 
-	tr := &http.Transport{
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 100,
-		MaxConnsPerHost:     100,
-
-		IdleConnTimeout:       30 * time.Second,
-		ResponseHeaderTimeout: 5 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-
-		DisableCompression: true,
-		DisableKeepAlives:  false,
-		ForceAttemptHTTP2:  false,
-
-		DialContext: (&net.Dialer{
-			Timeout:   100 * time.Millisecond,
-			KeepAlive: 90 * time.Second,
-			DualStack: true,
-		}).DialContext,
-	}
 	client := &http.Client{
-		Transport: tr,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			MaxConnsPerHost:     100,
+
+			IdleConnTimeout:       60 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+
+			DisableCompression: true,
+			DisableKeepAlives:  false,
+			ForceAttemptHTTP2:  false,
+
+			DialContext: (&net.Dialer{
+				KeepAlive: 90 * time.Second,
+				DualStack: true,
+			}).DialContext,
+		},
 	}
 
 	endpoint := utils.GetEnvOrSetDefault("MONGO_ENDPOINT", "localhost:27017")
@@ -59,7 +56,6 @@ func main() {
 		ApplyURI(endpoint).
 		SetServerSelectionTimeout(time.Second * 5).
 		SetMaxConnIdleTime(30 * time.Second).
-		SetMinPoolSize(40).
 		SetMaxPoolSize(100)
 
 	mdbClient, err := mongo.Connect(ctx, opts)
