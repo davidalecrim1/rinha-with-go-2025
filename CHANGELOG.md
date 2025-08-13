@@ -192,9 +192,18 @@
 
 **Commit:** b729027224756610e2346a450b6fc819daec8e74
 **Load Test Commit Version**: 0d902eb25bc430c015fd3b0956fcba4385957c75
-**Load Test Result**:
+**Load Test Result**: N/A.
 
 **Changes**:
 - Fix inconsistency bug with `less than` instead of `less than or equal` in the sorted set.
 - Solve the other inconsistencies with a shorter health check.
 - Fine tune the workers configuration for this version.
+
+# v3.0.0 (Unix Socket Extreme)
+
+**Commit:** fc2fed1427ba0a64bc1fba3d7970c3f9148e4dee
+**Load Test Commit Version**: f22556b7bd2dfa1e8d25b575f0c854ff32556cc7
+**Load Test Result**: report_20250813_094519.html
+
+**Changes**:
+- This version removes redis as the database for the payments and use a unified version in the worker that is in memory connected using unix sockets between the API and the worker.
