@@ -20,5 +20,5 @@ logging:
   level: "info" # debug, info, warn, error
 
 pre_warm:
-  enabled: true
-  requests_per_backend: 20 # times the amount of backends for total
+  enabled: false
+  requests_per_backend: 50 # times the amount of backends for total
