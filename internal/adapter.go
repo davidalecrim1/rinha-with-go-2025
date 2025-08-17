@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -20,10 +21,12 @@ var (
 )
 
 const (
-	HealthCheckKeyDefault  = "health-check:default"
-	HealthCheckKeyFallback = "health-check:fallback"
-	HealthCheckTicker      = 1 * time.Second
-	MinimumResponseTime    = 200 // in milliseconds
+	HealthCheckKeyDefault   = "health-check:default"
+	HealthCheckKeyFallback  = "health-check:fallback"
+	HealthCheckTicker       = 1 * time.Second
+	MinimumResponseTime     = 200 // in milliseconds
+	MinJitterBetweenRetries = 20 * time.Millisecond
+	MaxJitterBetweenRetries = 40 * time.Millisecond
 )
 
 type PaymentProcessorAdapter struct {
@@ -350,7 +353,7 @@ func (a *PaymentProcessorAdapter) syncHealthStatus(key string) error {
 
 func (a *PaymentProcessorAdapter) retryWorkers() {
 	for payment := range a.retryQueue {
-		time.Sleep(time.Millisecond * 10) // wait before retry
+		time.Sleep(time.Duration(rand.Intn(int(MaxJitterBetweenRetries-MinJitterBetweenRetries))) + MinJitterBetweenRetries)
 		a.Process(payment)
 	}
 }

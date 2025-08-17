@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime/pprof"
 	"runtime/trace"
+	"strconv"
 	"time"
 
 	"rinha-with-go-2025/internal"
@@ -54,8 +55,7 @@ func main() {
 	opts := options.
 		Client().
 		ApplyURI(endpoint).
-		SetServerSelectionTimeout(time.Second * 5).
-		SetMaxConnIdleTime(30 * time.Second).
+		SetMaxConnIdleTime(60 * time.Second).
 		SetMaxPoolSize(100)
 
 	mdbClient, err := mongo.Connect(ctx, opts)
@@ -69,8 +69,20 @@ func main() {
 	mdb := mdbClient.Database(utils.GetEnvOrSetDefault("MONGO_DATABASE", "payments-db"))
 
 	repo := internal.NewPaymentRepository(mdb)
-	workers := 30
-	retryQueue := make(chan internal.PaymentRequestProcessor, 6000)
+
+	workersStr := utils.GetEnvOrSetDefault("WORKERS", "30")
+	workers, err := strconv.Atoi(workersStr)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse the workers: %v", err))
+	}
+
+	retryQueueSizeStr := utils.GetEnvOrSetDefault("RETRY_QUEUE_SIZE", "6000")
+	retryQueueSize, err := strconv.Atoi(retryQueueSizeStr)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse the retry queue size: %v", err))
+	}
+
+	retryQueue := make(chan internal.PaymentRequestProcessor, retryQueueSize)
 
 	redisAddr := utils.GetEnvOrSetDefault("REDIS_ADDR", "localhost:6379")
 	rdb := redis.NewClient(&redis.Options{
