@@ -24,7 +24,7 @@ const (
 	HealthCheckKeyDefault   = "health-check:default"
 	HealthCheckKeyFallback  = "health-check:fallback"
 	HealthCheckTicker       = 1 * time.Second
-	MinimumResponseTime     = 200 // in milliseconds
+	MinimumResponseTime     = 100 // in milliseconds
 	MinJitterBetweenRetries = 20 * time.Millisecond
 	MaxJitterBetweenRetries = 40 * time.Millisecond
 )
