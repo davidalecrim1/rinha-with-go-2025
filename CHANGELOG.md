@@ -20,7 +20,7 @@
 - Short the retries logic considering the timeout of the load test.
 - Seeing the current logic of the K6 script. This won't be enough to ensure no requests are lost.
 
-# v.0.1.0
+# v0.1.0
 
 **Commit:** e72babf9f772466be49115e085bd833947f6412f
 **Load Test Commit Version**: 2ac3f62f225afd6748e9164be3c4d4ebe5d3474e
@@ -32,7 +32,7 @@
 - This current version is running with all the computing power from my computer. The next version should be tuned for the infrastructure restrictions.
 - I still see some inconsistency in this version: balance_inconsistency_amount -> 79.6
 
-# v.0.2.0
+# v0.2.0
 
 **Commit:** 828d26fae859051b774eb45c4ce2d8cb42299a37
 **Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
@@ -42,7 +42,7 @@
 
 - Using Docker, the inconsistency is too high. Even greater than the synchronous version: balance_inconsistency_amount -> 9.3k. Sometimes this was lower, but still high (3.7k).
 
-# v.0.2.0 (Sync)
+# v0.2.0 (Sync)
 
 **Commit:** 3e87ffc21a147bb3ab64a4545f87f174bac45d4c
 **Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
@@ -54,7 +54,7 @@
 - balance_inconsistency_amount -> 199
 - I discovered that the balance inconsistency can happen because I might send request that have the requestedAt in the past and cause the balance to be different when the load test calls the endpoints from the 3 APIs. Therefore I'm affecting the past and causing inconsistency.
 
-# v.0.2.1 (Sync)
+# v0.2.1 (Sync)
 
 **Commit:** d57f01bbb463ed918099114c85e819d0530d9d9e
 **Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
@@ -66,7 +66,7 @@
 - I still see little inconsistency. I will optimize my code to remove all inconsistencies and tune the processing.
 - This might be even worse than the one using Resty. But it was a great experience to try it out.
 
-# v.0.3.0 (Async)
+# v0.3.0 (Async)
 
 **Commit:** 467445c92f8c426ae2ceafabd1b26a12c77c8b24
 **Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
@@ -77,7 +77,7 @@
 - Added a channel as a queue to process if not possible as a slow queue.
 - Discovered that RFC3339Nano is better than RFC3339 to have more precision. Decrease the inconsistency from this version from 11k to 3.8k.
 
-# v.0.4.0 (Async)
+# v0.4.0 (Async)
 
 **Commit:** e556d5805b7ecbdb287bdc6858e9ad039bc8079b
 **Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
@@ -89,7 +89,7 @@
 - This is the best result so far, but still fake because of the time.Add.
   - total_transactions_amount -> 333.9k
 
-# v.0.4.1 (Async)
+# v0.4.1 (Async)
 
 **Commit:** d4e437b2922f1658718507ff3fea8ea27da73a09
 **Load Test Commit Version**: 1dee293bf46f995029c7f43902d9cba9d4949990
@@ -100,7 +100,7 @@
 - Removed the time.Add and still have a great result.
   - total_transactions_amount -> 293.7k
 
-# v.0.5.0 (Async)
+# v0.5.0 (Async)
 
 **Commit:** ac0f9f5f956a0c3e95329c7ce358cd782e57c838
 **Load Test Commit Version**: c1fef63d23ee7cab54ebd1fd03cb20565536947c
@@ -112,7 +112,7 @@
 - total_transactions_amount: 302.6k
 - balance_inconsistency_amount: 0
 
-# v.0.6.0 (Async - MongoDB)
+# v0.6.0 (Async - MongoDB)
 
 **Commit:** c97b5a226ed3e9277c09740b443ef66549da5790
 **Load Test Commit Version**: c1fef63d23ee7cab54ebd1fd03cb20565536947c
@@ -122,7 +122,7 @@
 
 - Using the partial results, I see that the precision problem was an actual thing and I needed to fix it. Therefore I ajusted it in the summary.
 
-# v.0.7.0 (Async - MongoDB)
+# v0.7.0 (Async - MongoDB)
 
 **Commit:** ceb4ababb32a3fa141353b8db000db228b7878aa
 **Load Test Commit Version**: c1fef63d23ee7cab54ebd1fd03cb20565536947c
@@ -132,7 +132,7 @@
 
 - I understood better the inconsistency and improve the overall code to execute with less probability of inconsistency.
 
-# v.0.8.0 (Async - MongoDB)
+# v0.8.0 (Async - MongoDB)
 ****
 **Commit:** e8d9ad379e36ee72d6947af912f62a9f539a8919
 **Load Test Commit Version**: 1fada81c0ea09f5b82a7ae61ffe3444602d3adea
@@ -143,7 +143,7 @@
 - I explore more alternatives to improve the inconsistency of this version. But it still happens in this version.
 - This versions seems to be less inconsistency when compared with others before using Mongo.
 
-# v.0.9.0 (Async - MongoDB)
+# v0.9.0 (Async - MongoDB)
 
 **Commit:** 1d60271c540ca1c6d52438b1291707e1debeead4
 **Load Test Commit Version**: 1fada81c0ea09f5b82a7ae61ffe3444602d3adea
@@ -153,7 +153,7 @@
 - Improved the health check to avoid inconsistencies.
 - Still have inconsistencies sometimes. I will need to dive deep in this.
 
-# v.0.10.0 (Async - MongoDB)
+# v0.10.0 (Async - MongoDB)
 
 **Commit:** e42829858b063344021fbba323c8fe9dbb73c4c5
 **Load Test Commit Version**: be9c02cc37baf0ff6229364b981ba86839e938a5
@@ -164,7 +164,7 @@
 - Reduce the workers to the minimum possible.
 - I still find some inconsistencies.
 
-# v.0.11.0 (Async - MongoDB)
+# v0.11.0 (Async - MongoDB)
 
 **Commit:** 27e6eaa03736b627bcd76e1d568dcaca9d19f5a4
 **Load Test Commit Version**: 839ed64f8da076979cfbba85f0bab37fea963309
@@ -172,8 +172,8 @@
 
 **Changes**:
 - Solve this version inconsistency. It was caused buy the filter LTE (less than or equal to) instead of LT (less than). Changing it to LT solved the issue.
-- 
-# v.0.11.1 (Async - MongoDB)
+
+# v0.11.1 (Async - MongoDB)
 
 **Commit:** 514b973c989b83a83ac1ba0f3ab0ed03da2c4f4d
 **Load Test Commit Version**: 80e9010cae555d60e3f45487404f47a8cb5f9bf5
@@ -181,3 +181,12 @@
 
 **Changes**:
 - The MongoDB was crashing for some reason on the latest version of the tests. I did some changes to help fix it.
+
+# v1.0.0 (Async - MongoDB - After the final results)
+
+**Commit:** 514b973c989b83a83ac1ba0f3ab0ed03da2c4f4d
+**Load Test Commit Version**: aa8a43156b2e5755e8f248bf29a66593fa3a6b9c
+**Load Test Result**: report_20250828_083107.html
+
+**Changes**:
+- This version had a problem in the docker file that couldn't run on the final results of the contest. I fix that problem and ran locally. This seems to reach 1.8m in the final results when it didn't caught inconsistencies. It's a nice version if I didn't fall for the only process in the default endpoint trap.
