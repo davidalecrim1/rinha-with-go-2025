@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
@@ -28,14 +29,28 @@ func main() {
 		profiling.ProfileApplication(time.Minute * 2)
 	}
 
-	httpClient := &fasthttp.HostClient{
+	defaultFasthttpClient := &fasthttp.HostClient{
 		Addr:                          cfg.PaymentProcessorDefault,
-		MaxConns:                      200,
+		MaxConns:                      300,
 		ReadTimeout:                   10 * time.Second,
 		WriteTimeout:                  10 * time.Second,
 		MaxIdleConnDuration:           60 * time.Second,
 		DisableHeaderNamesNormalizing: true,
 		NoDefaultUserAgentHeader:      true,
+	}
+
+	fallbackFasthttpClient := &fasthttp.HostClient{
+		Addr:                          cfg.PaymentProcessorFallback,
+		MaxConns:                      300,
+		ReadTimeout:                   10 * time.Second,
+		WriteTimeout:                  10 * time.Second,
+		MaxIdleConnDuration:           60 * time.Second,
+		DisableHeaderNamesNormalizing: true,
+		NoDefaultUserAgentHeader:      true,
+	}
+
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
 	}
 
 	redisClient := redis.NewClient(&redis.Options{
@@ -51,6 +66,8 @@ func main() {
 	repo := internal.NewPaymentRepository(redisClient)
 	processor := internal.NewPaymentProcessor(
 		redisClient,
+		defaultFasthttpClient,
+		fallbackFasthttpClient,
 		httpClient,
 		repo,
 		cfg,

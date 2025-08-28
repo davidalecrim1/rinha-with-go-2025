@@ -102,7 +102,7 @@ services:
       - MONITOR_HEALTH=true
       - ENABLE_PROFILING=false
       - REDIS_ADDR=/var/run/redis.sock
-      - WORKERS=150
+      - WORKERS=300
     deploy:
       resources:
         limits:
