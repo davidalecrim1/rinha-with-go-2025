@@ -9,6 +9,19 @@ You must develop a backend that receives payment requests and forwards them to t
 The Payment Processor source code is available at:  
 https://github.com/zanfranceschi/rinha-de-backend-2025-payment-processor
 
-## System Design
+## Challenge Versions
 
-![](./docs/system-design.excalidraw.png)
+It was created about 6 public released versions with different architectures and strategies to have the highest performance on the challenge, they are:
+- https://github.com/davidalecrim1/rinha-with-go-2025/tree/release/redis-fasthttp-extreme-v4
+- https://github.com/davidalecrim1/rinha-with-go-2025/tree/release/redis-fasthttp-extreme-v3
+- https://github.com/davidalecrim1/rinha-with-go-2025/tree/release/unix-sockets
+- https://github.com/davidalecrim1/rinha-with-go-2025/tree/release/redis-default
+- https://github.com/davidalecrim1/rinha-with-go-2025/tree/release/mongodb
+- https://github.com/davidalecrim1/rinha-with-go-2025/tree/release/redis-fasthttp-nginx
+
+Some use Nginx as a reverse proxy, some use a custom load balancer called Extreme made in Go. Some use Redis as a database, others use MongoDB or in-memory one. Most of them have the network I/O optimized using Unix Domain Sockets. These versions allowed me to reach the top 30 solutions for the competition.
+
+### System Design
+
+This design is for the version of [release/mongodb](https://github.com/davidalecrim1/rinha-with-go-2025/tree/release/mongodb). It was the original version that lead to the optimization of the other ones.
+![](./docs/system-design.excalidraw.png).
