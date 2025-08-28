@@ -17,6 +17,13 @@ super-load-test:
 	K6_WEB_DASHBOARD_EXPORT="$(EXPORT_FILE)" \
 	k6 run -e MAX_REQUESTS=850 ./rinha-source/rinha-test/rinha.js
 
+load-test-final:
+	K6_WEB_DASHBOARD=true \
+	K6_WEB_DASHBOARD_PORT=5665 \
+	K6_WEB_DASHBOARD_OPEN=true \
+	K6_WEB_DASHBOARD_EXPORT="$(EXPORT_FILE)" \
+	k6 run ./rinha-source/rinha-test/rinha-final.js
+
 run-one-instance-local:
 	docker compose -f rinha-docker-compose-arm64.yml restart && air . 
 
